@@ -1,0 +1,27 @@
+{
+  "name": "full-stack-design-tool",
+  "version": "0.1.0",
+  "private": true,
+  "description": "全栈全链路设计工具：从画布 IR 生成 OpenAPI / UI Schema / 示例数据 / 前后端代码",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b && pnpm -r --if-present typecheck",
+    "clean": "pnpm -r --if-present run clean",
+    "typecheck:tests": "sh scripts/typecheck-tests.sh",
+    "smoke": "sh scripts/smoke.sh",
+    "verify": "pnpm run build && pnpm run typecheck && pnpm run typecheck:tests && pnpm test && pnpm run smoke"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

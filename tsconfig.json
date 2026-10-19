@@ -1,0 +1,16 @@
+{
+  "//": "solution 风格：本身不编译任何文件，只聚合各包的 project reference。新增包时在 references 里加一行。",
+  "files": [],
+  "references": [
+    { "path": "./packages/core-ir" },
+    { "path": "./packages/compiler" },
+    { "path": "./packages/sample" },
+    { "path": "./packages/lint" },
+    { "path": "./packages/exporter" },
+    { "path": "./packages/importer" },
+    { "path": "./packages/generators/runtime" },
+    { "path": "./packages/generators/vue" },
+    { "path": "./packages/generators/nestjs" },
+    { "path": "./apps/cli" }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@fsdt/importer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "设计图导入：Figma 节点树 / 视觉模型输出 → 字段候选 → 待确认后写入 IR",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@fsdt/core-ir": "workspace:*"
+  }
+}

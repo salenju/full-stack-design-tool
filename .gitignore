@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.DS_Store
+*.log
+
+# 服务模式（TD 5.2 模式 A）的本地状态，不进版本库
+.fsdt/
+
+# 本地密钥，绝不入库
+.env
+.env.local
+.env.*.local
+
+# 生成产物的默认落点（产物应由 design/ir.json 重新生成，不入库）
+/output/
+
+# 编辑器
+.vscode/
+.idea/

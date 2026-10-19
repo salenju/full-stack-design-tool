@@ -1,0 +1,31 @@
+{
+  "name": "@fsdt/core-ir",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IR 类型、Zod schema、ID、默认值、语义哈希、版本迁移",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --dry",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "nanoid": "6.0.2",
+    "zod": "4.6.7"
+  }
+}

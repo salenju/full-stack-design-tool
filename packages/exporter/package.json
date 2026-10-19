@@ -1,0 +1,26 @@
+{
+  "name": "@fsdt/exporter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IR 画布 → svg / png / mermaid / drawio / json 反向导出",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@fsdt/core-ir": "workspace:*"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}
