@@ -1,0 +1,37 @@
+{
+  "name": "@fsdt/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "fsdt 画布工作台：可视化编辑 IR，并一键 lint / compile / gen / export",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit -p tsconfig.json && vite build",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
+    "preview": "vite preview",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@fsdt/compiler": "workspace:*",
+    "@fsdt/core-ir": "workspace:*",
+    "@fsdt/exporter": "workspace:*",
+    "@fsdt/generator-nestjs": "workspace:*",
+    "@fsdt/generator-vue": "workspace:*",
+    "@fsdt/generators-runtime": "workspace:*",
+    "@fsdt/lint": "workspace:*",
+    "@fsdt/sample": "workspace:*",
+    "@vue-flow/background": "^1.3.2",
+    "@vue-flow/controls": "^1.1.3",
+    "@vue-flow/core": "^1.48.2",
+    "@vue-flow/minimap": "^1.5.4",
+    "element-plus": "^2.14.7",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "typescript": "5.9.3",
+    "vite": "^8.3.4",
+    "vue-tsc": "^3.3.13"
+  }
+}

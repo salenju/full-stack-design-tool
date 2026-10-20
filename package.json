@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@10.12.1",
   "scripts": {
+    "dev": "pnpm --filter @fsdt/web dev",
     "build": "pnpm -r --if-present run build",
     "test": "vitest run",
     "test:watch": "vitest",
