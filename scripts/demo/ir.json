@@ -1,0 +1,731 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "prj_demo",
+    "name": "设备管理平台"
+  },
+  "canvases": [
+    {
+      "id": "cv_7SaRJa2dJNcy",
+      "name": "主画布",
+      "order": 0,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "zoom": 1
+      },
+      "grid": {
+        "enabled": true,
+        "size": 16
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "nd_tbl000000001",
+      "kind": "table",
+      "name": "设备",
+      "codeName": "Device",
+      "canvasId": "cv_7SaRJa2dJNcy",
+      "position": {
+        "x": 80,
+        "y": 80
+      },
+      "size": {
+        "w": 280,
+        "h": 420
+      },
+      "collapsed": false,
+      "tags": [
+        "core"
+      ],
+      "table": {
+        "dbName": "devices",
+        "comment": "设备主表",
+        "softDelete": true,
+        "timestamps": true,
+        "indexes": [],
+        "fields": [
+          {
+            "id": "fd_devid0000001",
+            "name": "id",
+            "dbName": "id",
+            "type": "integer",
+            "comment": "主键",
+            "required": true,
+            "nullable": false,
+            "readOnly": true
+          },
+          {
+            "id": "fd_devname00001",
+            "name": "name",
+            "dbName": "name",
+            "type": "string",
+            "comment": "设备名称",
+            "required": true,
+            "nullable": false,
+            "constraints": {
+              "minLength": 2,
+              "maxLength": 64
+            }
+          },
+          {
+            "id": "fd_devsn0000001",
+            "name": "serialNumber",
+            "dbName": "serial_number",
+            "type": "string",
+            "comment": "序列号",
+            "required": true,
+            "nullable": false,
+            "constraints": {
+              "maxLength": 64
+            }
+          },
+          {
+            "id": "fd_devst0000001",
+            "name": "status",
+            "dbName": "status",
+            "type": "enum",
+            "comment": "运行状态",
+            "required": true,
+            "nullable": false,
+            "constraints": {
+              "enumRef": "en_dvst00000001"
+            }
+          },
+          {
+            "id": "fd_devip0000001",
+            "name": "ipAddress",
+            "dbName": "ip_address",
+            "type": "string",
+            "comment": "IP 地址",
+            "required": false,
+            "nullable": true
+          },
+          {
+            "id": "fd_devown000001",
+            "name": "owner",
+            "dbName": "owner",
+            "type": "string",
+            "comment": "负责人",
+            "required": false,
+            "nullable": true
+          },
+          {
+            "id": "fd_devstore0001",
+            "name": "storageGb",
+            "dbName": "storage_gb",
+            "type": "integer",
+            "comment": "存储容量(GB)",
+            "required": false,
+            "nullable": true,
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "id": "fd_devok0000001",
+            "name": "enabled",
+            "dbName": "enabled",
+            "type": "boolean",
+            "comment": "是否启用",
+            "required": true,
+            "nullable": false,
+            "constraints": {
+              "default": true
+            }
+          },
+          {
+            "id": "fd_devbuy000001",
+            "name": "purchasedAt",
+            "dbName": "purchased_at",
+            "type": "date",
+            "comment": "采购日期",
+            "required": false,
+            "nullable": true
+          },
+          {
+            "id": "fd_devdesc00001",
+            "name": "description",
+            "dbName": "description",
+            "type": "text",
+            "comment": "备注",
+            "required": false,
+            "nullable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "nd_api000000001",
+      "kind": "api",
+      "name": "设备列表",
+      "codeName": "listDevices",
+      "canvasId": "cv_7SaRJa2dJNcy",
+      "position": {
+        "x": 460,
+        "y": 80
+      },
+      "size": {
+        "w": 280,
+        "h": 220
+      },
+      "collapsed": false,
+      "tags": [
+        "device"
+      ],
+      "api": {
+        "method": "GET",
+        "path": "/devices",
+        "summary": "分页查询设备列表",
+        "tags": [
+          "device"
+        ],
+        "auth": "none",
+        "pathParams": [],
+        "query": [
+          {
+            "id": "fd_q00000000001",
+            "name": "page",
+            "type": "integer",
+            "comment": "页码",
+            "required": false,
+            "nullable": false,
+            "constraints": {
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "id": "fd_q00000000002",
+            "name": "pageSize",
+            "type": "integer",
+            "comment": "每页条数",
+            "required": false,
+            "nullable": false,
+            "constraints": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "id": "fd_q00000000003",
+            "name": "keyword",
+            "type": "string",
+            "comment": "名称/序列号模糊搜索",
+            "required": false,
+            "nullable": true
+          },
+          {
+            "id": "fd_q00000000004",
+            "name": "status",
+            "type": "enum",
+            "comment": "状态筛选",
+            "required": false,
+            "nullable": true,
+            "constraints": {
+              "enumRef": "en_dvst00000001"
+            }
+          }
+        ],
+        "headers": [],
+        "responses": [
+          {
+            "status": 200,
+            "description": "成功",
+            "shape": "array",
+            "envelope": {
+              "dataKey": "items",
+              "totalKey": "total"
+            },
+            "fields": [
+              {
+                "id": "fd_r00000000005",
+                "name": "id",
+                "type": "integer",
+                "required": true,
+                "nullable": false
+              },
+              {
+                "id": "fd_r00000000006",
+                "name": "name",
+                "type": "string",
+                "comment": "设备名称",
+                "required": true,
+                "nullable": false
+              },
+              {
+                "id": "fd_r00000000007",
+                "name": "serialNumber",
+                "type": "string",
+                "comment": "序列号",
+                "required": true,
+                "nullable": false
+              },
+              {
+                "id": "fd_r00000000008",
+                "name": "status",
+                "type": "enum",
+                "comment": "运行状态",
+                "required": true,
+                "nullable": false,
+                "constraints": {
+                  "enumRef": "en_dvst00000001"
+                }
+              },
+              {
+                "id": "fd_r00000000009",
+                "name": "ipAddress",
+                "type": "string",
+                "comment": "IP 地址",
+                "required": false,
+                "nullable": true
+              },
+              {
+                "id": "fd_r00000000010",
+                "name": "owner",
+                "type": "string",
+                "comment": "负责人",
+                "required": false,
+                "nullable": true
+              },
+              {
+                "id": "fd_r00000000011",
+                "name": "enabled",
+                "type": "boolean",
+                "comment": "是否启用",
+                "required": true,
+                "nullable": false
+              },
+              {
+                "id": "fd_r00000000012",
+                "name": "purchasedAt",
+                "type": "date",
+                "comment": "采购日期",
+                "required": false,
+                "nullable": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "nd_api000000002",
+      "kind": "api",
+      "name": "创建设备",
+      "codeName": "createDevice",
+      "canvasId": "cv_7SaRJa2dJNcy",
+      "position": {
+        "x": 460,
+        "y": 460
+      },
+      "size": {
+        "w": 280,
+        "h": 220
+      },
+      "collapsed": false,
+      "tags": [
+        "device"
+      ],
+      "api": {
+        "method": "POST",
+        "path": "/devices",
+        "summary": "新建设备",
+        "tags": [
+          "device"
+        ],
+        "auth": "none",
+        "pathParams": [],
+        "query": [],
+        "headers": [],
+        "requestBody": {
+          "shape": "object",
+          "required": true,
+          "fields": [
+            {
+              "id": "fd_b00000000013",
+              "name": "name",
+              "type": "string",
+              "comment": "设备名称",
+              "required": true,
+              "nullable": false
+            },
+            {
+              "id": "fd_b00000000014",
+              "name": "serialNumber",
+              "type": "string",
+              "comment": "序列号",
+              "required": true,
+              "nullable": false
+            },
+            {
+              "id": "fd_b00000000015",
+              "name": "status",
+              "type": "enum",
+              "comment": "运行状态",
+              "required": true,
+              "nullable": false,
+              "constraints": {
+                "enumRef": "en_dvst00000001"
+              }
+            },
+            {
+              "id": "fd_b00000000016",
+              "name": "ipAddress",
+              "type": "string",
+              "comment": "IP 地址",
+              "required": false,
+              "nullable": true
+            },
+            {
+              "id": "fd_b00000000017",
+              "name": "owner",
+              "type": "string",
+              "comment": "负责人",
+              "required": false,
+              "nullable": true
+            },
+            {
+              "id": "fd_b00000000018",
+              "name": "storageGb",
+              "type": "integer",
+              "comment": "存储容量(GB)",
+              "required": false,
+              "nullable": true
+            },
+            {
+              "id": "fd_b00000000019",
+              "name": "enabled",
+              "type": "boolean",
+              "comment": "是否启用",
+              "required": true,
+              "nullable": false
+            },
+            {
+              "id": "fd_b00000000020",
+              "name": "purchasedAt",
+              "type": "date",
+              "comment": "采购日期",
+              "required": false,
+              "nullable": true
+            },
+            {
+              "id": "fd_b00000000021",
+              "name": "description",
+              "type": "text",
+              "comment": "备注",
+              "required": false,
+              "nullable": true
+            }
+          ]
+        },
+        "responses": [
+          {
+            "status": 201,
+            "description": "创建成功",
+            "shape": "object",
+            "fields": [
+              {
+                "id": "fd_r00000000022",
+                "name": "id",
+                "type": "integer",
+                "required": true,
+                "nullable": false
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "nd_pg0000000001",
+      "kind": "page",
+      "name": "设备列表页",
+      "codeName": "DeviceList",
+      "canvasId": "cv_7SaRJa2dJNcy",
+      "position": {
+        "x": 860,
+        "y": 80
+      },
+      "size": {
+        "w": 300,
+        "h": 400
+      },
+      "collapsed": false,
+      "tags": [
+        "page"
+      ],
+      "page": {
+        "route": "/devices",
+        "title": "设备管理",
+        "layout": "list",
+        "components": [
+          {
+            "id": "cp_search000001",
+            "type": "searchForm",
+            "title": "筛选",
+            "inline": true,
+            "collapsible": false,
+            "apiRef": "nd_api000000001",
+            "bindings": [
+              {
+                "fieldRef": "fd_devname00001",
+                "control": "input",
+                "span": 8,
+                "placeholder": "设备名称"
+              },
+              {
+                "fieldRef": "fd_devst0000001",
+                "control": "select",
+                "span": 6
+              }
+            ]
+          },
+          {
+            "id": "cp_table0000001",
+            "type": "table",
+            "title": "设备列表",
+            "bindings": [],
+            "apiRef": "nd_api000000001",
+            "rowKeyFieldRef": "fd_devid0000001",
+            "pagination": {
+              "mode": "server",
+              "pageSize": 20
+            },
+            "selection": "multiple",
+            "columns": [
+              {
+                "fieldRef": "fd_devname00001",
+                "sortable": true
+              },
+              {
+                "fieldRef": "fd_devsn0000001"
+              },
+              {
+                "fieldRef": "fd_devst0000001",
+                "width": 120
+              },
+              {
+                "fieldRef": "fd_devip0000001"
+              },
+              {
+                "fieldRef": "fd_devown000001"
+              },
+              {
+                "fieldRef": "fd_devok0000001",
+                "width": 100
+              },
+              {
+                "fieldRef": "fd_devbuy000001",
+                "width": 140,
+                "sortable": true
+              }
+            ],
+            "rowActions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "nd_pg0000000002",
+      "kind": "page",
+      "name": "新建设备页",
+      "codeName": "DeviceCreate",
+      "canvasId": "cv_7SaRJa2dJNcy",
+      "position": {
+        "x": 860,
+        "y": 460
+      },
+      "size": {
+        "w": 300,
+        "h": 400
+      },
+      "collapsed": false,
+      "tags": [
+        "page"
+      ],
+      "page": {
+        "route": "/devices/create",
+        "title": "新建设备",
+        "layout": "form",
+        "components": [
+          {
+            "id": "cp_form00000001",
+            "type": "form",
+            "title": "设备信息",
+            "mode": "create",
+            "apiRef": "nd_api000000002",
+            "layout": "vertical",
+            "submitText": "保存",
+            "bindings": [
+              {
+                "fieldRef": "fd_devname00001",
+                "control": "input",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devsn0000001",
+                "control": "input",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devst0000001",
+                "control": "select",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devip0000001",
+                "control": "input",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devown000001",
+                "control": "input",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devstore0001",
+                "control": "number",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devok0000001",
+                "control": "switch",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devbuy000001",
+                "control": "date",
+                "span": 12
+              },
+              {
+                "fieldRef": "fd_devdesc00001",
+                "control": "textarea",
+                "span": 24
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "ed_call00000001",
+      "kind": "call",
+      "source": {
+        "nodeId": "nd_pg0000000001"
+      },
+      "target": {
+        "nodeId": "nd_api000000001"
+      },
+      "canvasId": "cv_7SaRJa2dJNcy"
+    },
+    {
+      "id": "ed_call00000002",
+      "kind": "call",
+      "source": {
+        "nodeId": "nd_pg0000000002"
+      },
+      "target": {
+        "nodeId": "nd_api000000002"
+      },
+      "canvasId": "cv_7SaRJa2dJNcy"
+    },
+    {
+      "id": "ed_read00000001",
+      "kind": "read",
+      "source": {
+        "nodeId": "nd_api000000001",
+        "fieldId": "fd_r00000000006",
+        "port": "out"
+      },
+      "target": {
+        "nodeId": "nd_tbl000000001",
+        "fieldId": "fd_devname00001",
+        "port": "in"
+      },
+      "canvasId": "cv_7SaRJa2dJNcy"
+    }
+  ],
+  "dictionaries": {
+    "enums": [
+      {
+        "id": "en_dvst00000001",
+        "name": "DeviceStatus",
+        "description": "设备运行状态",
+        "values": [
+          {
+            "value": "ACTIVE",
+            "label": "在线",
+            "color": "#22c55e"
+          },
+          {
+            "value": "OFFLINE",
+            "label": "离线",
+            "color": "#94a3b8"
+          },
+          {
+            "value": "MAINTENANCE",
+            "label": "维护中",
+            "color": "#f59e0b"
+          }
+        ]
+      }
+    ],
+    "models": []
+  },
+  "assets": [],
+  "settings": {
+    "frontend": {
+      "framework": "vue",
+      "ui": "element-plus",
+      "apiStyle": "script-setup",
+      "packageManager": "pnpm",
+      "stateSolution": "pinia",
+      "requestLib": "axios",
+      "strictness": "strict"
+    },
+    "backend": {
+      "framework": "nestjs",
+      "orm": "prisma",
+      "validation": "class-validator",
+      "swagger": true,
+      "auth": "none"
+    },
+    "naming": {
+      "tableCase": "snake",
+      "fieldCase": "camel",
+      "pathCase": "kebab",
+      "fileCase": "kebab"
+    },
+    "generation": {
+      "outDir": "output",
+      "sampleCount": 20,
+      "sampleSeed": 42,
+      "aiEnabled": false
+    },
+    "import": {
+      "candidateAutoAcceptThreshold": 0.85,
+      "candidateManualThreshold": 0.5
+    },
+    "export": {
+      "image": "svg",
+      "structure": "json",
+      "includeFieldPorts": false
+    },
+    "lint": {
+      "enabled": true,
+      "blockOnError": true,
+      "ruleOverrides": {},
+      "ignores": []
+    }
+  },
+  "meta": {
+    "createdAt": "2026-10-19T23:14:41.539Z",
+    "updatedAt": "2026-10-19T23:14:41.539Z",
+    "generator": "fsdt@0.1.0"
+  }
+}

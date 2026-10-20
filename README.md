@@ -32,6 +32,43 @@ fsdt gen --out ./output             # 生成前后端（默认只预览）
 fsdt gen --check                    # CI 门禁：产物与画布不一致则退出码 1
 ```
 
+## 画布工作台（apps/web）
+
+CLI 之外的可视化入口：拖节点建图、改字段、跑 Lint、编译契约、生成产物、导出画布。
+
+![工作台首页](docs/images/workbench-overview.png)
+
+```bash
+pnpm install
+pnpm build      # 首次需要：工作台直接消费各包的 dist
+pnpm dev        # → http://localhost:5180
+```
+
+**和 CLI 共用同一份 IR**：
+
+| 情况 | 工作台用哪个文件 |
+|---|---|
+| 仓库根有 `design/ir.json` | 直接用它（和 `fsdt init` 生成的位置一致） |
+| 没有 | 用 `.fsdt/web/design/ir.json`，首次打开种一份「设备管理」示例 |
+| 想指向别处 | `FSDT_WEB_WORKSPACE=/path/to/project pnpm dev` |
+
+界面上每处改动 800ms 防抖自动落盘，所以改完直接 `fsdt lint` / `fsdt gen` 就能看到结果，不需要导出导入。
+
+数据通道是 vite 的 dev 中间件（`apps/web/server/`），不是一个独立后端进程——少一个进程就少一份「谁先写的」竞态，而且各端点直接调 `@fsdt/*` 的库函数，产物与命令行逐字节一致。
+
+| 端点 | 作用 |
+|---|---|
+| `GET /api/state` | 读 IR + 工作区路径 + 语义哈希 |
+| `PUT /api/ir` | 校验后原子写盘（校验不过拒绝写入） |
+| `POST /api/lint` | L001–L014 |
+| `POST /api/compile` | OpenAPI 3.1 + UI Schema |
+| `POST /api/gen` | 渲染 Vue / NestJS，`write: true` 才落盘 |
+| `POST /api/export` | svg / png / mermaid / drawio / json |
+
+界面能力：四类节点（表 / 接口 / 页面 / 备注）、五类边（call / read / write / map / navigate，按两端类型自动判定）、字段级端口、表字段编辑器（含约束 / 枚举 / 外键）、接口与页面检查器、撤销重做（60 步）、自动保存、「整理布局」、Lint 面板点条目定位节点、生成产物预览。
+
+**还没做的**（对应技术设计里未落地的部分）：`tabs` / `card` 容器组件、候选确认面板（Figma / 图片导入）、快照与回滚、服务模式（多项目 / HTTP API）、AI 填充。
+
 ## 命令
 
 | 命令 | 作用 | 是否写盘 |
@@ -57,6 +94,7 @@ fsdt gen --check                    # CI 门禁：产物与画布不一致则退
 
 ```
 apps/cli                      命令行
+apps/web                      画布工作台（Vue 3 + Vue Flow + Element Plus）
 packages/core-ir              IR 类型 / Zod schema / 校验 / 语义哈希 / 迁移
 packages/compiler             IR → OpenAPI 3.1 + UI Schema
 packages/sample               确定性示例数据（内置 PRNG，不用 faker）
@@ -86,11 +124,12 @@ packages/generators/nestjs    NestJS 12 + Prisma
 
 ```bash
 pnpm verify            # 一条命令跑完下面全部
-pnpm build             # 全包 tsc -b
+pnpm build             # 全包 tsc -b（含 apps/web 的 vue-tsc + vite build）
 pnpm typecheck         # tsc -b + 逐包 typecheck
 pnpm typecheck:tests   # 逐包检查测试文件类型
 pnpm test              # 669 条单测
 pnpm smoke             # 端到端：真跑一遍全部 CLI 命令
+pnpm dev               # 画布工作台（http://localhost:5180）
 ```
 
 `pnpm smoke` 值得单独说：单测覆盖的是各包行为，而「CLI 装起来能不能跑通一条链路」

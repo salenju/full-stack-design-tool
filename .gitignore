@@ -19,3 +19,6 @@ coverage/
 # 编辑器
 .vscode/
 .idea/
+
+# AI 协作的本地工作目录：会话记忆、草稿，只对本机有意义
+.workbuddy/
