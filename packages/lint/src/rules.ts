@@ -247,11 +247,19 @@ const RULES: LintRule[] = [
             const apiNode = ctx.g.nodes.get(component.apiRef);
             if (apiNode === undefined || apiNode.kind !== 'api') continue;
             const bound = new Set(component.bindings.map((b) => b.fieldRef));
+            // 字段是独立实体（IR002 要求 ID 全局唯一），所以「表单绑的表字段」与
+            // 「请求体里的必填字段」天然不是同一个 ID。只按 ID 比对会把正确绑定判成缺失，
+            // 因此再按字段名兜一层——与 L014 的 findFieldIdByName 是同一个策略。
+            const boundNames = new Set<string>();
+            for (const ref of bound) {
+              const loc = ctx.g.fields.get(ref);
+              if (loc !== undefined) boundNames.add(loc.field.name);
+            }
             const bodyFields = apiNode.api.requestBody?.fields ?? [];
             for (const field of bodyFields) {
               if (!field.required) continue;
               if (field.readOnly === true) continue;
-              if (!bound.has(field.id)) {
+              if (!bound.has(field.id) && !boundNames.has(field.name)) {
                 push(
                   `接口「${apiNode.name}」的必填字段「${field.name}」在表单「${component.title ?? component.id}」里没有控件`,
                   { nodeId: page.id, pageId: page.id, componentId: component.id, fieldId: field.id },

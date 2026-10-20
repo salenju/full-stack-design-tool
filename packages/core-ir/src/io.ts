@@ -10,13 +10,29 @@
  * 绝不静默覆盖用户数据——这是唯一不可妥协的一条。
  */
 
-import { readFile, writeFile, mkdir, copyFile, access } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-
 import { migrateToCurrent } from './migrations.js';
 import { irSchema } from './schema.js';
 import type { Diagnostic } from './diagnostics.js';
 import type { IR } from './types.js';
+
+/**
+ * Node 的文件 API 一律走动态 import。
+ *
+ * 原因：core-ir 同时被 CLI（Node）和 apps/web（浏览器）引用。静态
+ * `import ... from 'node:fs/promises'` 会让 vite 在客户端构建时把它 externalize，
+ * 于是整个模块一被加载就抛「Module node:fs/promises has been externalized」，
+ * 前端连 `createTableNode` 都用不了。
+ *
+ * 浏览器端从不调用下面三个函数（IO 全部走 vite 中间件），所以只要不静态引入就安全。
+ * 对 CLI 无影响：loadIR / saveIR / pathExists 本来就是 async。
+ */
+async function nodeFs(): Promise<typeof import('node:fs/promises')> {
+  return import('node:fs/promises');
+}
+
+async function nodePath(): Promise<typeof import('node:path')> {
+  return import('node:path');
+}
 
 export class IRFileError extends Error {
   constructor(
@@ -93,9 +109,10 @@ export function coerceToIR(raw: unknown, source = '<object>'): IR {
   return parsed.data as IR;
 }
 
-async function exists(path: string): Promise<boolean> {
+async function exists(target: string): Promise<boolean> {
+  const { access } = await nodeFs();
   try {
-    await access(path);
+    await access(target);
     return true;
   } catch {
     return false;
@@ -104,6 +121,8 @@ async function exists(path: string): Promise<boolean> {
 
 /** 读取 IR 文件，自动备份 + 迁移 + 校验 */
 export async function loadIR(path: string, options: LoadIROptions = {}): Promise<LoadIRResult> {
+  const { resolve } = await nodePath();
+  const { readFile, copyFile } = await nodeFs();
   const abs = resolve(path);
   let text: string;
   try {
@@ -170,6 +189,8 @@ export interface SaveIROptions {
 
 /** 写入 IR 文件（父目录自动创建；默认原子写 + 校验） */
 export async function saveIR(path: string, ir: IR, options: SaveIROptions = {}): Promise<string> {
+  const { resolve, dirname } = await nodePath();
+  const { writeFile, mkdir } = await nodeFs();
   const abs = resolve(path);
   const indent = options.indent ?? 2;
 
