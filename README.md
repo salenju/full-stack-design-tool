@@ -27,10 +27,13 @@ pnpm build
 cd /path/to/your-project
 fsdt init --name 设备管理平台        # 创建 design/ir.json（文件模式）
 fsdt compile --stdout json          # 看当前 IR 编译出的契约（不写盘）
-fsdt lint                           # 跑契约规则
+fsdt lint                           # 跑契约规则（含 IR 语义诊断）
+fsdt lint --fix                     # 自动修复能修的，写回 IR
 fsdt gen --out ./output             # 生成前后端（默认只预览）
 fsdt gen --check                    # CI 门禁：产物与画布不一致则退出码 1
 ```
+
+`fsdt gen` 在渲染前会跑一遍语义校验与 Lint，有 error 级问题就中止——否则「非法 IR 生成出 31 个文件」这种事故只能等编译期才发现。确认要强行生成时加 `--skip-verify`。
 
 ## 画布工作台（apps/web）
 
@@ -65,9 +68,9 @@ pnpm dev        # → http://localhost:5180
 | `POST /api/gen` | 渲染 Vue / NestJS，`write: true` 才落盘 |
 | `POST /api/export` | svg / png / mermaid / drawio / json |
 
-界面能力：四类节点（表 / 接口 / 页面 / 备注）、五类边（call / read / write / map / navigate，按两端类型自动判定）、字段级端口、表字段编辑器（含约束 / 枚举 / 外键）、接口与页面检查器、撤销重做（60 步）、自动保存、「整理布局」、Lint 面板点条目定位节点、生成产物预览。
+界面能力：四类节点（表 / 接口 / 页面 / 备注）、五类边（call / read / write / map / navigate，按两端类型自动判定）、字段级端口、表字段编辑器（含约束 / 枚举 / 外键）、接口与页面检查器、撤销重做（60 步）、自动保存、「整理布局」、Lint 面板点条目定位节点、一键修复、生成产物预览。
 
-**还没做的**（对应技术设计里未落地的部分）：`tabs` / `card` 容器组件、候选确认面板（Figma / 图片导入）、快照与回滚、服务模式（多项目 / HTTP API）、AI 填充。
+**还没做的**（对应技术设计里未落地的部分）：往返机制（区块标记 + 三方合并，手改文件被覆盖的问题仍在）、候选确认面板（Figma / 图片导入）、快照与回滚、服务模式（多项目 / HTTP API）、AI 填充。
 
 ## 命令
 
