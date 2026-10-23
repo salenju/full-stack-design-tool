@@ -73,20 +73,38 @@ OUT=$($CLI gen --out ./output 2>&1)
 echo "$OUT" | grep -q '新增/更新 0，未变 [1-9]' || fail "gen 不幂等：$OUT"
 ok "gen（幂等）"
 
-# ── 9. sample / export ──────────────────────────────────────────────
+# ── 9. 往返：往 todo 区块里写实现，重新生成不丢 ──────────────────────
+# 这一步守的是产品的命门：用户改过生成代码后还敢不敢再跑一次 gen。
+SVC=output/backend/src/modules/devices/devices.service.ts
+if [ -f "$SVC" ]; then
+  grep -q '@dsg:todo start name=listDevices' "$SVC" || fail "service 没有 @dsg:todo 区块，往返机制退化"
+  node -e "
+const fs = require('fs');
+const p = 'output/backend/src/modules/devices/devices.service.ts';
+const t = fs.readFileSync(p, 'utf8');
+fs.writeFileSync(p, t.replace('throw new NotImplementedException(\'listDevices\');', 'return mine;'));
+" || fail "注入实现失败"
+  $CLI gen --out ./output >/dev/null 2>&1 || fail "实现 todo 区块后 gen 失败（应该合并而不是报错）"
+  grep -q 'return mine;' "$SVC" || fail "重新生成把手写实现冲掉了"
+  $CLI gen --check >/dev/null 2>&1 || fail "实现 todo 区块后 --check 报漂移（手写不该算漂移）"
+  $CLI gen --out ./output --force >/dev/null 2>&1 || fail "恢复失败"
+  ok "往返（实现 todo 区块后仍可重新生成）"
+fi
+
+# ── 10. sample / export ─────────────────────────────────────────────
 $CLI sample --rows 3 --out ./mocks >/dev/null 2>&1 || fail "sample 失败"
 [ -f mocks/devices.json ] || fail "sample 没产出 devices.json"
 $CLI export --format svg,mermaid,drawio,json --out ./docs >/dev/null 2>&1 || fail "export 失败"
 [ -f "docs/画布-1.svg" ] || fail "export 没产出一画布的 svg"
 ok "sample / export"
 
-# ── 10. --check 与 --out 必须互斥（否则 CI 永远绿）───────────────────
+# ── 11. --check 与 --out 必须互斥（否则 CI 永远绿）───────────────────
 if $CLI gen --check --out ./output >/dev/null 2>&1; then
   fail "--check 与 --out 同时给却没报错"
 fi
 ok "--check 与 --out 互斥"
 
-# ── 11. 二进制不能往终端吐 ──────────────────────────────────────────
+# ── 12. 二进制不能往终端吐 ──────────────────────────────────────────
 if $CLI export --format png >/dev/null 2>&1; then
   fail "png 没有 --out 却没报错"
 fi

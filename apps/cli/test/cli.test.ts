@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildFixture } from '@fsdt/core-ir/testing';
-import { saveIR } from '@fsdt/core-ir';
+import { loadIR, saveIR } from '@fsdt/core-ir';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseArgs, rejectUnknown, flagBool, flagList, flagString } from '../src/args.js';
 import { createContext, type CommandContext } from '../src/context.js';
@@ -366,6 +366,83 @@ describe('gen 命令', () => {
     const ctx = capture(root);
     expect(await runCli(['gen', '--out', './output'], ctx)).toBe(EXIT_OK);
     expect(ctx.stdoutText).toContain('新增/更新 0');
+  });
+
+  // ── 往返：手写内容与重新生成共存 ──────────────────────────────────
+  // 这组用例守的是整个工具最关键的一条：用户改过生成代码之后，还敢不敢再跑一次 gen。
+  // 不敢，产品价值在第一次手工修改后就归零。
+
+  it('往待实现区块里写的代码，改画布后重新生成仍在（且骨架已更新）', async () => {
+    const { dir: root, irPath } = await projectWithIr();
+    await runCli(['gen', '--out', './output'], capture(root));
+
+    const pagePath = join(root, 'output', 'frontend', 'src', 'views', 'devices.vue');
+    const svcPath = join(root, 'output', 'backend', 'src', 'modules', 'devices', 'devices.service.ts');
+
+    // 1) 用户填了两处：页面自定义区块 + service 方法体
+    const pageBefore = await readFile(pagePath, 'utf8');
+    expect(pageBefore).toContain('@dsg:todo start name=custom');
+    await writeFile(
+      pagePath,
+      pageBefore.replace('// 页面自有逻辑写在这里，重新生成时这段内容会被保留', "const mine = '手写内容';"),
+      'utf8',
+    );
+    const svcBefore = await readFile(svcPath, 'utf8');
+    await writeFile(
+      svcPath,
+      svcBefore.replace(
+        "throw new NotImplementedException('listDevices');",
+        'return this.prisma.device.findMany() as never;',
+      ),
+      'utf8',
+    );
+
+    // 2) 改画布：字段注释变了 → 表格列标签与 DTO 都变，区块外的内容必须更新
+    const { ir } = await loadIR(irPath);
+    const table = ir.nodes.find((n) => n.kind === 'table');
+    const field = table?.table.fields.find((f) => f.name === 'deviceName') ?? table?.table.fields[0];
+    expect(field).toBeDefined();
+    field!.comment = '设备名（改）';
+    await saveIR(irPath, ir);
+
+    // 3) 重新生成：不该报冲突，也不能丢掉手写部分
+    const ctx = capture(root);
+    expect(await runCli(['gen', '--out', './output'], ctx)).toBe(EXIT_OK);
+
+    const pageAfter = await readFile(pagePath, 'utf8');
+    expect(pageAfter).toContain("const mine = '手写内容';");
+    expect(pageAfter).toContain('设备名（改）');
+    expect(ctx.stdoutText).toContain('合并');
+    expect(await readFile(svcPath, 'utf8')).toContain('this.prisma.device.findMany()');
+  });
+
+  it('实现 todo 区块后 --check 仍然通过（手写不算漂移）', async () => {
+    const { dir: root } = await projectWithIr();
+    await runCli(['gen', '--out', './output'], capture(root));
+
+    const svcPath = join(root, 'output', 'backend', 'src', 'modules', 'devices', 'devices.service.ts');
+    const before = await readFile(svcPath, 'utf8');
+    await writeFile(
+      svcPath,
+      before.replace("throw new NotImplementedException('listDevices');", 'return Promise.resolve() as never;'),
+      'utf8',
+    );
+
+    const ctx = capture(root);
+    expect(await runCli(['gen', '--check'], ctx)).toBe(EXIT_OK);
+    expect(ctx.stdoutText).toContain('一致');
+  });
+
+  it('区块内改成手写也救不回来时仍报冲突，并说清是哪个区块', async () => {
+    const { dir: root } = await projectWithIr();
+    await runCli(['gen', '--out', './output', '--target', 'vue'], capture(root));
+    const mainPath = join(root, 'output', 'frontend', 'src', 'main.ts');
+    // 整个文件重写 → 没有任何区块标记，无法判断哪段是谁的
+    await writeFile(mainPath, '// 我自己写的入口\n', 'utf8');
+
+    const ctx = capture(root);
+    expect(await runCli(['gen', '--out', './output', '--target', 'vue'], ctx)).toBe(EXIT_FAIL);
+    expect(ctx.stderrText).toContain('没有 @dsg 区块标记');
   });
 
   it('非法 --target 退出码 2', async () => {

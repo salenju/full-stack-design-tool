@@ -24,6 +24,9 @@ export type { FileHeaderOptions, ParsedRegion, RegionOptions } from './markers.j
 export { diffManifest, needsFullRegeneration } from './manifest.js';
 export type { Manifest, ManifestDiff, ManifestFile, ManifestRegion } from './manifest.js';
 
+export { mergeRegions, regionsOf } from './merge.js';
+export type { MergeConflict, MergeConflictReason, MergeResult, MergeStatus } from './merge.js';
+
 export type {
   CodeGenerator,
   CompileContext,

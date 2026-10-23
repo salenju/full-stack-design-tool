@@ -7,7 +7,7 @@
  */
 
 import { toPackageName, type IR } from '@fsdt/core-ir';
-import { Writer, quote } from '@fsdt/generators-runtime';
+import { regionEnd, regionStart, Writer, quote } from '@fsdt/generators-runtime';
 import { controllerClassOf, serviceClassOf, type ResourceGroup } from './resource.js';
 
 export interface AssembleOptions {
@@ -126,10 +126,18 @@ export function renderMainTs(irHash: string, options: MainTsOptions): string {
   w.line('  // 统一异常格式：把 HttpException 与未捕获异常都收敛成 { statusCode, message, path }');
   w.line('  app.useGlobalFilters(new AllExceptionsFilter());');
   w.blank();
-  w.line('  // @dsg:todo 接入鉴权（本工具不生成 JWT 骨架）');
-  w.line('  // app.useGlobalGuards(new JwtAuthGuard(reflector));');
-  w.line('  // 若使用公司 SSO / 网关鉴权，在此替换为实现了 CanActivate 的 Guard。');
-  w.line('  // 注意：登录路由必须用 @Public() 之类机制反向放行，否则会死循环。');
+  // 鉴权挂载点包进 todo 区块：这一处几乎每个项目都要改，而它所在的 main.ts
+  // 又会随 Swagger 开关、全局前缀变化被重新生成。不包区块的话，接一次鉴权
+  // 就要在每次重新生成后重接一次。
+  const authHook = [
+    '  // 接入鉴权（本工具不生成 JWT 骨架）',
+    '  // app.useGlobalGuards(new JwtAuthGuard(reflector));',
+    '  // 若使用公司 SSO / 网关鉴权，在此替换为实现了 CanActivate 的 Guard。',
+    '  // 注意：登录路由必须用 @Public() 之类机制反向放行，否则会死循环。',
+  ].join('\n');
+  w.line(`  ${regionStart('ts', 'auth', authHook, 'todo')}`);
+  w.lines_(authHook);
+  w.line(`  ${regionEnd('ts', 'auth', 'todo')}`);
   w.blank();
   w.line("  app.setGlobalPrefix('api');");
   w.line('  app.enableCors({ origin: true, credentials: true });');

@@ -311,16 +311,20 @@ describe('控制器与服务', () => {
     expect(content).not.toContain('return {}');
   });
 
-  it('service 的 @dsg:todo 说明该写什么', async () => {
+  it('service 的方法体是 todo 区块，含「该写什么」的说明', async () => {
     const { ir } = buildFixture();
     const content = await renderPath(ir, 'src/modules/devices/devices.service.ts');
-    expect(content).toMatch(/@dsg:todo 实现 listDevices：分页查询/);
+    // 区块是往返机制的锚点：有了它，用户实现掉方法后重新生成才不会丢代码
+    expect(content).toContain('@dsg:todo start name=listDevices');
+    expect(content).toContain('@dsg:todo end name=listDevices');
+    expect(content).toMatch(/实现 listDevices：分页查询/);
   });
 
   it('main.ts 保留鉴权挂载点但不生成骨架', async () => {
     const { ir } = buildFixture();
     const content = await renderPath(ir, 'src/main.ts');
-    expect(content).toContain('@dsg:todo 接入鉴权');
+    expect(content).toContain('@dsg:todo start name=auth');
+    expect(content).toContain('接入鉴权');
     expect(content).not.toContain('JwtAuthGuard }');
     expect(content).toContain('forbidNonWhitelisted: true');
   });

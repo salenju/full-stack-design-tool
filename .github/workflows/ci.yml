@@ -1,0 +1,49 @@
+name: CI
+
+# 门禁清单刻意与 `pnpm verify` 一致：本地跑什么，CI 就跑什么。
+# 分开配一套 CI 脚本的结果是「本地绿、CI 红」，然后大家开始改 CI 而不是改代码。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 仓库根 .npmrc 已固定 node-linker=hoisted（isolated 布局装不上 vite 8 的
+      # @rolldown/pluginutils），所以这里不需要额外参数。
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 生成器直接消费各包的 dist，先全量构建；apps/web 的 vite build 也在这步。
+      - name: 构建
+        run: pnpm build
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 测试文件类型检查
+        run: pnpm typecheck:tests
+
+      - name: 单元测试
+        run: pnpm test
+
+      # 端到端：init → lint → compile → gen → 漂移 → 恢复 → 幂等 → sample → export
+      - name: 冒烟
+        run: pnpm smoke

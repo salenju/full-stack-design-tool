@@ -70,7 +70,7 @@ pnpm dev        # → http://localhost:5180
 
 界面能力：四类节点（表 / 接口 / 页面 / 备注）、五类边（call / read / write / map / navigate，按两端类型自动判定）、字段级端口、表字段编辑器（含约束 / 枚举 / 外键）、接口与页面检查器、撤销重做（60 步）、自动保存、「整理布局」、Lint 面板点条目定位节点、一键修复、生成产物预览。
 
-**还没做的**（对应技术设计里未落地的部分）：往返机制（区块标记 + 三方合并，手改文件被覆盖的问题仍在）、候选确认面板（Figma / 图片导入）、快照与回滚、服务模式（多项目 / HTTP API）、AI 填充。
+**还没做的**（对应技术设计里未落地的部分）：候选确认面板（Figma / 图片导入）、快照与回滚、服务模式（多项目 / HTTP API）、AI 填充。
 
 ## 命令
 
@@ -130,15 +130,56 @@ pnpm verify            # 一条命令跑完下面全部
 pnpm build             # 全包 tsc -b（含 apps/web 的 vue-tsc + vite build）
 pnpm typecheck         # tsc -b + 逐包 typecheck
 pnpm typecheck:tests   # 逐包检查测试文件类型
-pnpm test              # 669 条单测
+pnpm test              # 730 条单测
 pnpm smoke             # 端到端：真跑一遍全部 CLI 命令
 pnpm dev               # 画布工作台（http://localhost:5180）
 ```
 
 `pnpm smoke` 值得单独说：单测覆盖的是各包行为，而「CLI 装起来能不能跑通一条链路」
 是另一回事——路径解析、退出码、`--check` 与 `--out` 互斥，只有真跑一次才看得见。
-它在临时目录里 init → lint → compile → gen → 手改后验漂移 → 恢复 → 验幂等 → sample → export，
-任何一步不符合预期就非零退出。
+它在临时目录里 init → lint → compile → gen → 手改后验漂移 → 恢复 → 验幂等 →
+往 todo 区块里写实现后重新生成 → sample → export，任何一步不符合预期就非零退出。
+
+`pnpm verify` 的每一步在 CI（`.github/workflows/ci.yml`）里都有对应：本地跑什么、
+CI 就跑什么，避免「本地绿、CI 红」之后大家开始改 CI 而不是改代码。
+
+## 改过的代码还能重新生成（往返）
+
+「重新生成会覆盖我写的代码」是这类工具最常见的死法：第一次手工修改之后就再也不敢跑 `gen`。
+这里的解法是**区块标记 + 区块级三方合并**：
+
+```ts
+async listDevices(query: ListDevicesQueryDto): Promise<PageDevice> {
+  // @dsg:todo start name=listDevices hash=8f3c1a…
+  // 实现 listDevices：分页查询 Device，使用 query.page/query.pageSize 与筛选条件
+  throw new NotImplementedException('listDevices');
+  // @dsg:todo end name=listDevices
+}
+```
+
+把中间那段换成你自己的实现，契约再怎么改都只更新区块外的骨架，方法体原样保留。
+
+| 区块 | 重新生成时 |
+|---|---|
+| `@dsg:todo` / `@dsg:handwritten` | 一律保留磁盘内容（todo 就是你填的地方） |
+| `@dsg:generated` | 没动过 → 换成新内容；动过 → 报冲突，保留你的内容 |
+| 磁盘上多出来的区块 | 报冲突，不猜该挪到哪 |
+| 磁盘上完全没有标记 | 报冲突，不合并（整个文件可能被重写过） |
+
+生成器已经把最需要手写的三处包成了 `todo` 区块：NestJS service 的每个方法体、
+后端 `main.ts` 的鉴权挂载点、Vue 页面 `<script setup>` 末尾的自定义区块。
+区块外的一切（imports、签名、模板）由 IR 说了算，手写请放进区块里——文件头那句
+`@dsg:generated` 提示说的就是这件事。
+
+`fsdt gen` 的三种结局都会说清原因：
+
+```
+[backend] 新增/更新 0，未变 26，合并 2，冲突 0
+合计：写入 0 个文件，2 个文件在原位合并（手写区块保留）
+```
+
+`fsdt gen --check` 用的是同一套合并规则：**往 todo 区块里写代码不算漂移**，
+CI 不会因为「你实现了业务逻辑」而红灯；只有区块外与生成结果对不上才报漂移。
 
 ## 生成物是能真编译的
 

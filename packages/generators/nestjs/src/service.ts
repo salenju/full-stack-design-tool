@@ -10,7 +10,7 @@
  */
 
 import { type ApiNode } from '@fsdt/core-ir';
-import { Writer } from '@fsdt/generators-runtime';
+import { regionEnd, regionStart, Writer } from '@fsdt/generators-runtime';
 import {
   dtoClassOf,
   queryDtoFileOf,
@@ -86,11 +86,18 @@ export function renderService(ctx: TypeCtx, group: ResourceGroup, options: Servi
     const operationId = options.operationIdOf.get(api.id);
     if (operationId === undefined) continue;
     const { params, returnType } = signatureOf(ctx, api, operationId);
+    // 方法体整块包进 todo 区块：用户把这里实现掉之后，重新生成会原样保留。
+    // 没有这个区块，「改过画布 → 重新生成」就会把手写业务逻辑冲掉，工具价值在
+    // 第一次手工修改后归零。区块名用 operationId，与文件头里的 node= 对得上。
+    const body = [
+      `    // 实现 ${operationId}：${hintOf(api)}`,
+      `    throw new NotImplementedException('${operationId}');`,
+    ].join('\n');
     w.blank();
     w.line(`  async ${operationId}(${params.join(', ')}): Promise<${returnType}> {`);
-    const hint = hintOf(api);
-    w.line(`    // @dsg:todo 实现 ${operationId}：${hint}`);
-    w.line(`    throw new NotImplementedException('${operationId}');`);
+    w.line(`    ${regionStart('ts', operationId, body, 'todo')}`);
+    w.lines_(body);
+    w.line(`    ${regionEnd('ts', operationId, 'todo')}`);
     w.line('  }');
   }
 

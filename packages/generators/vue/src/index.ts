@@ -25,7 +25,7 @@ import {
   type FieldSchema,
   type PageSchema,
 } from '@fsdt/compiler';
-import { Writer, quote } from '@fsdt/generators-runtime';
+import { regionEnd, regionStart, Writer, quote } from '@fsdt/generators-runtime';
 import type { CodeGenerator, CompileContext, FilePlan, RenderedFile } from '@fsdt/generators-runtime';
 
 export const GENERATOR_ID = 'vue';
@@ -854,6 +854,18 @@ function renderScript(w: Writer, model: PageModel): void {
     w.line('  // @dsg:todo 从路由参数取 id 后调用 loadForm(id)');
   }
   w.line('});');
+
+  // ── 自定义区块 ──
+  // 埋点、权限判断、跨页面联动这些逻辑在 IR 里没有词汇，只能手写。给它们一个
+  // todo 区块，重新生成时原样保留——否则用户每改一次画布就要重写一次业务逻辑。
+  w.blank();
+  const custom = [
+    '// 页面自有逻辑写在这里，重新生成时这段内容会被保留',
+    '// 例：埋点上报、按钮级权限判断、与其它页面的联动',
+  ].join('\n');
+  w.line(regionStart('ts', 'custom', custom, 'todo'));
+  w.lines_(custom);
+  w.line(regionEnd('ts', 'custom', 'todo'));
 }
 
 /**

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createAction, createForm, newComponentId } from '@fsdt/core-ir';
 import { buildFixture } from '@fsdt/core-ir/testing';
-import type { IR } from '@fsdt/core-ir';
+import type { IR, TableComponent } from '@fsdt/core-ir';
 
 import { emitUiSchema } from '@fsdt/compiler';
 
@@ -372,10 +372,13 @@ function richPage() {
 
   deviceIdField.readOnly = true;
 
-  const table = listPage.page.components.find((c) => c.type === 'table');
+  const table = listPage.page.components.find((c): c is TableComponent => c.type === 'table');
   if (table === undefined) throw new Error('fixture 需要表格组件');
-  table.columns[1].formatter = "row.deviceName || '-'";
-  table.rowKey = 'deviceId';
+  const secondColumn = table.columns[1];
+  if (secondColumn === undefined) throw new Error('fixture 的表格需要至少两列');
+  secondColumn.formatter = "row.deviceName || '-'";
+  // IR 里没有 rowKey 这个名字，行 key 是通过字段引用表达的（UI Schema 才叫 rowKey）
+  table.rowKeyFieldRef = deviceIdField.id;
 
   const detailId = newComponentId();
   listPage.page.components = [

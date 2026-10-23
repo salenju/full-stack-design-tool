@@ -115,8 +115,6 @@ function setPageSize(size: number): void {
     if (component.type === 'table') component.pagination.pageSize = size;
   });
 }
-
-const unsupported = computed(() => props.component.type === 'tabs' || props.component.type === 'card');
 </script>
 
 <template>
@@ -133,10 +131,6 @@ const unsupported = computed(() => props.component.type === 'tabs' || props.comp
         @change="setTitle(String($event))"
       />
       <button class="card__del" type="button" title="删除组件" @click="emit('remove')">×</button>
-    </div>
-
-    <div v-if="unsupported" class="card__warn">
-      这个容器类型 Vue 生成器还没实现（代码里是 P1 TODO），生成时会变成一条注释。
     </div>
 
     <label v-if="'apiRef' in props.component" class="line">
@@ -285,15 +279,6 @@ const unsupported = computed(() => props.component.type === 'tabs' || props.comp
 .card__del:hover {
   background: #fef2f2;
   color: #ef4444;
-}
-
-.card__warn {  font-size: 10.5px;
-  color: #b45309;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 5px;
-  padding: 5px 7px;
-  line-height: 1.5;
 }
 
 .line {
