@@ -24,3 +24,6 @@ export type {
   SampleRow,
   TableSample,
 } from './generate.js';
+
+export { toHttpFile, toPostmanCollection, toSeedSql } from './exports.js';
+export type { ExportSampleOptions, PostmanCollection, SeedSqlOptions } from './exports.js';

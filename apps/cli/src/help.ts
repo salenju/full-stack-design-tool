@@ -76,13 +76,15 @@ export const COMMANDS: CommandDoc[] = [
   {
     name: 'sample',
     summary: '生成示例数据（确定性，同 seed 同结果）',
-    usage: 'fsdt sample [--seed <n>] [--rows <n>] [--out <dir>]',
+    usage: 'fsdt sample [--seed <n>] [--rows <n>] [--out <dir>] [--format json|http|postman|sql]',
     options: [
       { flag: '--seed <n>', desc: '随机种子，默认取 IR 里的 settings' },
       { flag: '--rows <n>', desc: '每表行数' },
-      { flag: '--out <dir>', desc: '写盘为每表一个 JSON + index.ts' },
+      { flag: '--out <dir>', desc: '写盘：每表一个 JSON + index.ts，以及所选格式的文件' },
+      { flag: '--format <f>', desc: 'json（默认）| http（REST Client）| postman（v2.1）| sql（INSERT），可重复' },
+      { flag: '--base-url <url>', desc: 'http / postman 里的服务地址，默认 http://localhost:3000' },
     ],
-    example: 'fsdt sample --rows 20 --out ./mocks',
+    example: 'fsdt sample --rows 20 --out ./mocks --format http --format postman --format sql',
     needsIr: true,
   },
   {
