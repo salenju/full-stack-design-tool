@@ -1,4 +1,4 @@
-import { createField, createTableNode, toKebabCase } from '@fsdt/core-ir';
+import { createApiNode, createField, createTableNode, toKebabCase } from '@fsdt/core-ir';
 import { buildFixture } from '@fsdt/core-ir/testing';
 import { describe, expect, it } from 'vitest';
 import {
@@ -382,5 +382,90 @@ describe('prisma.config.ts（Prisma 7 的连接串位置）', () => {
     expect(cfg).toContain("from 'prisma/config'");
     expect(cfg).toContain("schema: 'prisma/schema.prisma'");
     expect(cfg).toContain("url: env('DATABASE_URL')");
+  });
+});
+
+describe('swagger 开关', () => {
+  async function renderAll(ir: ReturnType<typeof buildFixture>['ir']): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const plan of nestjsGenerator.plan(ir, CTX)) {
+      out.set(plan.path, (await nestjsGenerator.render(plan, ir, CTX)).content);
+    }
+    return out;
+  }
+
+  it('swagger=true 时产出 SwaggerModule 装配与文档装饰器', async () => {
+    const { ir } = buildFixture();
+    const files = await renderAll(ir);
+
+    expect(files.get('src/main.ts')).toContain('SwaggerModule.setup(');
+    expect(files.get('src/main.ts')).toContain('DocumentBuilder');
+    expect(files.get('src/modules/devices/devices.controller.ts')).toContain('@ApiTags(');
+  });
+
+  it('swagger=false 时全工程不再引用 @nestjs/swagger', async () => {
+    const { ir } = buildFixture();
+    ir.settings.backend.swagger = false;
+    const files = await renderAll(ir);
+
+    const offenders: string[] = [];
+    for (const [path, content] of files) {
+      if (content.includes('@nestjs/swagger')) offenders.push(path);
+    }
+    // 依赖被删了但 import 还在，是「生成物编译不过」的经典成因
+    expect(offenders).toEqual([]);
+  });
+
+  it('swagger=false 时 DTO 不再带 ApiProperty 装饰器', async () => {
+    const fixture = buildFixture();
+    fixture.ir.settings.backend.swagger = false;
+    const files = await renderAll(fixture.ir);
+
+    const dtos = [...files.entries()].filter(([path]) => path.includes('.dto.'));
+    expect(dtos.length).toBeGreaterThan(0);
+    for (const [path, content] of dtos) {
+      expect(content, `${path} 仍带 ApiProperty`).not.toContain('ApiProperty');
+    }
+    // 校验装饰器不能一起丢——那是运行时的行为，不是文档
+    expect(dtos.some(([, content]) => content.includes('class-validator'))).toBe(true);
+  });
+
+  it('swagger 开关决定 package.json 里装哪个包', async () => {
+    const on = await renderAll(buildFixture().ir);
+    const onPkg = JSON.parse(on.get('package.json') ?? '{}') as { dependencies: Record<string, string> };
+    expect(onPkg.dependencies['@nestjs/swagger']).toBeDefined();
+    expect(onPkg.dependencies['@nestjs/mapped-types']).toBeUndefined();
+
+    const offFixture = buildFixture();
+    offFixture.ir.settings.backend.swagger = false;
+    const off = await renderAll(offFixture.ir);
+    const offPkg = JSON.parse(off.get('package.json') ?? '{}') as { dependencies: Record<string, string> };
+    expect(offPkg.dependencies['@nestjs/swagger']).toBeUndefined();
+    expect(offPkg.dependencies['@nestjs/mapped-types']).toBeDefined();
+  });
+});
+
+describe('common/ 公共件', () => {
+  it('plan 里包含分页 DTO、异常过滤器、响应包装', () => {
+    const { ir } = buildFixture();
+    const paths = nestjsGenerator.plan(ir, CTX).map((p) => p.path);
+    expect(paths).toContain('src/common/pagination.dto.ts');
+    expect(paths).toContain('src/common/http-exception.filter.ts');
+    expect(paths).toContain('src/common/response.interceptor.ts');
+  });
+
+  it('main.ts 注册了统一异常过滤器，但不擅自注册响应包装', async () => {
+    const { ir } = buildFixture();
+    const content = await renderPath(ir, 'src/main.ts');
+    expect(content).toContain('AllExceptionsFilter');
+    // 包一层会改变响应体契约，必须由用户决定
+    expect(content).not.toContain('useGlobalInterceptors(new ResponseInterceptor');
+  });
+
+  it('响应包装文件里说明了启用代价', async () => {
+    const { ir } = buildFixture();
+    const content = await renderPath(ir, 'src/common/response.interceptor.ts');
+    expect(content).toContain('useGlobalInterceptors');
+    expect(content).toContain('schema');
   });
 });

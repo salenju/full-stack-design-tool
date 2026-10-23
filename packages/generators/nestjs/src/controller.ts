@@ -114,6 +114,13 @@ export interface ControllerOptions {
   operationIdOf: Map<string, string>;
   /** 接口节点 ID → 渲染好的响应类型是否为空 */
   irHash: string;
+  /**
+   * 是否生成 @nestjs/swagger 装饰器（跟 `settings.backend.swagger` 走）。
+   *
+   * 必须显式传：package.json 里的依赖是按这个开关加的，装饰器却无条件生成过，
+   * 于是 swagger=false 的工程会 import 一个没装进依赖的包，tsc 直接失败。
+   */
+  swagger: boolean;
 }
 
 export function renderController(
@@ -144,11 +151,15 @@ export function renderController(
   }
 
   common.add('Controller');
-  swagger.add('ApiTags');
-  swagger.add('ApiOkResponse');
+  if (options.swagger) {
+    swagger.add('ApiTags');
+    swagger.add('ApiOkResponse');
+  }
 
   w.line(`import { ${[...common].sort().join(', ')} } from '@nestjs/common';`);
-  w.line(`import { ${[...swagger].sort().join(', ')} } from '@nestjs/swagger';`);
+  if (swagger.size > 0) {
+    w.line(`import { ${[...swagger].sort().join(', ')} } from '@nestjs/swagger';`);
+  }
   w.line(`import { ${serviceClassOf(group)} } from './${group.dir}.service';`);
 
   // DTO 与响应类的导入路径统一走 resource.ts 的 helper：
@@ -178,7 +189,7 @@ export function renderController(
   }
   w.blank();
 
-  w.line(`@ApiTags(${quote(group.segment)})`);
+  if (options.swagger) w.line(`@ApiTags(${quote(group.segment)})`);
   w.line(`@Controller(${quote(group.segment)})`);
   w.line(`export class ${controllerClassOf(group)} {`);
   w.line(`  constructor(private readonly ${serviceVarOf(group)}: ${serviceClassOf(group)}) {}`);
@@ -190,7 +201,7 @@ export function renderController(
     w.blank();
     // 空子路径必须写成 @Get()：@Get('') 在部分路由版本下会匹配到带斜杠的路径
     w.line(sub.length > 0 ? `  @${decorator}(${quote(sub)})` : `  @${decorator}()`);
-    w.line(`  @ApiOkResponse(${apiOkResponseArgs(model)})`);
+    if (options.swagger) w.line(`  @ApiOkResponse(${apiOkResponseArgs(model)})`);
     const returnType = responseTsTypeOf(model);
     const params = pm.params.length > 0 ? pm.params.join(', ') : '';
     w.line(`  ${operationId}(${params}): Promise<${returnType}> {`);

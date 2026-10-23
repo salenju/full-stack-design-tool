@@ -44,9 +44,44 @@ declare module '@nestjs/common' {
   export const Module: any;
   export const Global: any;
   export const ValidationPipe: any;
+  export const Catch: any;
+  export const Logger: any;
+  export const HttpStatus: any;
+  // 这几个在生成代码里是「类型位置」用的（implements ExceptionFilter / 参数类型），
+  // 必须声明成 interface；声明成 const 会得到「值被当类型用」的 TS2749
+  export interface ExceptionFilter {
+    catch(exception: unknown, host: ArgumentsHost): void;
+  }
+  export interface ArgumentsHost {
+    switchToHttp(): { getResponse<T>(): T; getRequest<T>(): T };
+  }
+  export interface CallHandler<T = any> {
+    handle(): any;
+  }
+  export interface ExecutionContext {
+    switchToHttp(): any;
+  }
+  export interface NestInterceptor<T = any, R = any> {
+    intercept(context: ExecutionContext, next: CallHandler<T>): any;
+  }
+  // 声明成 class 而不是 any：生成代码里有 exception instanceof HttpException，
+  // 用 any 的话窄化不成立，后面调 getStatus() 会被判成 unknown 上报错
+  export class HttpException extends Error {
+    getStatus(): number;
+    getResponse(): unknown;
+  }
   export class NotImplementedException extends Error {}
   export interface OnModuleInit { onModuleInit(): Promise<void> }
   export interface OnModuleDestroy { onModuleDestroy(): Promise<void> }
+}
+declare module '@nestjs/mapped-types' {
+  export const PartialType: any;
+}
+declare module 'rxjs' {
+  export interface Observable<T> { subscribe(next: (value: T) => void): void }
+}
+declare module 'rxjs/operators' {
+  export function map<T, R>(fn: (value: T) => R): (source: unknown) => unknown;
 }
 declare module '@nestjs/core' {
   export const NestFactory: any;
@@ -57,6 +92,8 @@ declare module '@nestjs/swagger' {
   export const ApiTags: any;
   export const ApiOkResponse: any;
   export const PartialType: any;
+  export const DocumentBuilder: any;
+  export const SwaggerModule: any;
 }
 declare module 'class-validator' {
   export const IsString: any;

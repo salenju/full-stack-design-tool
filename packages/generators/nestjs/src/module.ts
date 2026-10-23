@@ -7,7 +7,7 @@
  */
 
 import { toPackageName, type IR } from '@fsdt/core-ir';
-import { Writer } from '@fsdt/generators-runtime';
+import { Writer, quote } from '@fsdt/generators-runtime';
 import { controllerClassOf, serviceClassOf, type ResourceGroup } from './resource.js';
 
 export interface AssembleOptions {
@@ -93,12 +93,21 @@ export function renderPrismaService(irHash: string): string {
   return w.toString();
 }
 
-export function renderMainTs(irHash: string): string {
+export interface MainTsOptions {
+  /** 是否装配 SwaggerModule（跟 settings.backend.swagger 走） */
+  swagger: boolean;
+  /** 文档标题，用项目名 */
+  title: string;
+}
+
+export function renderMainTs(irHash: string, options: MainTsOptions): string {
   const w = new Writer();
   w.line(`// @dsg:generated file=src/main.ts ir=${irHash} generator=nestjs@0.1.0`);
   w.line("import { ValidationPipe } from '@nestjs/common';");
   w.line("import { NestFactory } from '@nestjs/core';");
+  if (options.swagger) w.line("import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';");
   w.line("import { AppModule } from './app.module';");
+  w.line("import { AllExceptionsFilter } from './common/http-exception.filter';");
   w.blank();
   w.line('async function bootstrap(): Promise<void> {');
   w.line('  const app = await NestFactory.create(AppModule);');
@@ -114,6 +123,9 @@ export function renderMainTs(irHash: string): string {
   w.line('    }),');
   w.line('  );');
   w.blank();
+  w.line('  // 统一异常格式：把 HttpException 与未捕获异常都收敛成 { statusCode, message, path }');
+  w.line('  app.useGlobalFilters(new AllExceptionsFilter());');
+  w.blank();
   w.line('  // @dsg:todo 接入鉴权（本工具不生成 JWT 骨架）');
   w.line('  // app.useGlobalGuards(new JwtAuthGuard(reflector));');
   w.line('  // 若使用公司 SSO / 网关鉴权，在此替换为实现了 CanActivate 的 Guard。');
@@ -121,6 +133,18 @@ export function renderMainTs(irHash: string): string {
   w.blank();
   w.line("  app.setGlobalPrefix('api');");
   w.line('  app.enableCors({ origin: true, credentials: true });');
+  if (options.swagger) {
+    w.blank();
+    w.line('  const config = new DocumentBuilder()');
+    w.line(`    .setTitle(${quote(options.title)})`);
+    w.line("    .setVersion('0.1.0')");
+    w.line('    .build();');
+    w.line('  SwaggerModule.setup(');
+    w.line("    'docs',");
+    w.line('    app,');
+    w.line('    SwaggerModule.createDocument(app, config),');
+    w.line('  );');
+  }
   w.blank();
   w.line('  await app.listen(Number(process.env.PORT ?? 3000));');
   w.line('}');
@@ -148,7 +172,11 @@ export function renderPackageJson(projectName: string, ir: IR): string {
       '@nestjs/common': '^12.2.0',
       '@nestjs/core': '^12.2.0',
       '@nestjs/platform-express': '^12.2.0',
-      '@nestjs/swagger': ir.settings.backend.swagger ? '^12.0.2' : undefined,
+      // 关闭 swagger 时改由 mapped-types 提供 PartialType（Update DTO 要用），
+      // 它的体积只有一个装饰器，不连带 swagger 那一整套
+      ...(ir.settings.backend.swagger
+        ? { '@nestjs/swagger': '^12.0.2' }
+        : { '@nestjs/mapped-types': '^2.1.0' }),
       '@prisma/client': '^7.10.1',
       'class-transformer': '^0.5.1',
       'class-validator': '^0.14.1',

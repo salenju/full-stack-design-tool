@@ -70,15 +70,17 @@ export function responseTsTypeOf(model: ResponseModel): string {
   }
 }
 
-function renderClass(ctx: TypeCtx, w: Writer, className: string, fields: Field[]): void {
+function renderClass(ctx: TypeCtx, w: Writer, className: string, fields: Field[], useSwagger: boolean): void {
   w.line(`export class ${className} {`);
   // writeOnly 字段（密码、密钥）不进响应类型：类型上存在不代表真会返回，
   // 但生成器若把它写进响应类，前端就会拿到「密码字段」并开始展示它。
   for (const field of fields.filter((f) => f.writeOnly !== true)) {
-    const description = field.comment ?? field.description;
-    const decorator =
-      description !== undefined ? `@ApiProperty({ description: ${quote(description)} })` : '@ApiProperty()';
-    w.line(`  ${decorator}`);
+    if (useSwagger) {
+      const description = field.comment ?? field.description;
+      const decorator =
+        description !== undefined ? `@ApiProperty({ description: ${quote(description)} })` : '@ApiProperty()';
+      w.line(`  ${decorator}`);
+    }
     w.line(`  ${field.name}${isOptionalField(field) ? '?' : '!'}: ${tsTypeOfField(ctx, field)};`);
     w.blank();
   }
@@ -91,15 +93,26 @@ export interface ResponseSpec {
   content: string;
 }
 
+export interface RenderResponseOptions {
+  /** 生成 @ApiProperty 装饰器，默认 true（与 settings.backend.swagger 一致） */
+  swagger?: boolean;
+}
+
 /** 一个接口对应的响应类文件（可能一个文件里有两个类：Item + Page） */
-export function renderResponseClasses(ctx: TypeCtx, operationId: string, api: ApiNode): ResponseSpec | undefined {
+export function renderResponseClasses(
+  ctx: TypeCtx,
+  operationId: string,
+  api: ApiNode,
+  options: RenderResponseOptions = {},
+): ResponseSpec | undefined {
+  const useSwagger = options.swagger ?? true;
   const model = responseModelOf(operationId, api);
   if (model.kind === 'void' || model.kind === 'raw') return undefined;
 
   const base = toPascalCase(operationId);
   const fileName = `${base}Response`;
   const w = new Writer();
-  w.line("import { ApiProperty } from '@nestjs/swagger';");
+  if (useSwagger) w.line("import { ApiProperty } from '@nestjs/swagger';");
 
   // 响应里出现枚举时必须显式导入：TS 里裸写 DeviceStatus 只是「以为它存在」，
   // 而 tsc 的报错会指向整个文件，不指名是哪个枚举漏了。
@@ -116,17 +129,17 @@ export function renderResponseClasses(ctx: TypeCtx, operationId: string, api: Ap
   w.blank();
 
   if (model.kind === 'item') {
-    renderClass(ctx, w, model.className, model.fields);
+    renderClass(ctx, w, model.className, model.fields, useSwagger);
   } else if (model.kind === 'itemArray') {
-    renderClass(ctx, w, model.className, model.fields);
+    renderClass(ctx, w, model.className, model.fields, useSwagger);
   } else {
-    renderClass(ctx, w, model.itemClassName, model.fields);
+    renderClass(ctx, w, model.itemClassName, model.fields, useSwagger);
     w.blank();
     w.line(`export class ${model.className} {`);
-    w.line(`  @ApiProperty({ type: [${model.itemClassName}] })`);
+    if (useSwagger) w.line(`  @ApiProperty({ type: [${model.itemClassName}] })`);
     w.line(`  ${model.dataKey}!: ${model.itemClassName}[];`);
     w.blank();
-    w.line('  @ApiProperty()');
+    if (useSwagger) w.line('  @ApiProperty()');
     w.line(`  ${model.totalKey}!: number;`);
     w.line('}');
   }

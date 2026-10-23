@@ -33,6 +33,7 @@ import { dtoSpecsOf, renderController } from './controller.js';
 import { renderService } from './service.js';
 import { renderResponseClasses } from './response.js';
 import { responseModelOf } from './response.js';
+import { renderExceptionFilter, renderPaginationDto, renderResponseInterceptor } from './common.js';
 import {
   renderAppModule,
   renderEnvExample,
@@ -60,6 +61,15 @@ export const nestjsGenerator: CodeGenerator = {
   version: GENERATOR_VERSION,
 
   plan(ir: IR): FilePlan[] {
+    // 同 vue 生成器：不支持的值必须显式失败，否则会生成一份「配置写着 typeorm、
+    // 代码却是 Prisma」的工程，而用户要到 nest build 才会发现
+    if (ir.settings.backend.orm !== 'prisma') {
+      throw new Error(
+        `后端 ORM「${ir.settings.backend.orm}」暂不支持：NestJS 生成器只实现了 prisma。` +
+          '请把 settings.backend.orm 改回 prisma。',
+      );
+    }
+
     const groups = groupByResource(ir);
     const allocation = allocateOperationIds(ir);
     const apiNodeIds = ir.nodes.filter((n) => n.kind === 'api').map((n) => n.id);
@@ -89,6 +99,27 @@ export const nestjsGenerator: CodeGenerator = {
         description: 'Prisma 7 起连接串在这里配置（schema 里已不允许写 url）',
       },
       { path: 'src/main.ts', kind: 'config', sourceNodeIds: [], overwrite: 'if-generated' },
+      {
+        path: 'src/common/pagination.dto.ts',
+        kind: 'dto',
+        sourceNodeIds: [],
+        overwrite: 'if-generated',
+        description: '通用分页参数（page / pageSize）',
+      },
+      {
+        path: 'src/common/http-exception.filter.ts',
+        kind: 'config',
+        sourceNodeIds: [],
+        overwrite: 'if-generated',
+        description: '统一异常格式',
+      },
+      {
+        path: 'src/common/response.interceptor.ts',
+        kind: 'config',
+        sourceNodeIds: [],
+        overwrite: 'if-generated',
+        description: '统一响应包装（默认不注册）',
+      },
       { path: 'src/app.module.ts', kind: 'config', sourceNodeIds: apiNodeIds, overwrite: 'always' },
       { path: 'src/prisma/prisma.module.ts', kind: 'module', sourceNodeIds: [], overwrite: 'if-generated' },
       { path: 'src/prisma/prisma.service.ts', kind: 'module', sourceNodeIds: [], overwrite: 'if-generated' },
@@ -174,7 +205,11 @@ export const nestjsGenerator: CodeGenerator = {
         return {
           ...base,
           language: 'ts',
-          content: renderController(typeCtx, group, { operationIdOf: allocation.byNodeId, irHash }),
+          content: renderController(typeCtx, group, {
+            operationIdOf: allocation.byNodeId,
+            irHash,
+            swagger: ir.settings.backend.swagger,
+          }),
         };
       }
       if (rest === `${group.dir}.service.ts`) {
@@ -200,6 +235,7 @@ export const nestjsGenerator: CodeGenerator = {
                 fileName: rest,
                 fields: spec.fields,
               },
+              { swagger: ir.settings.backend.swagger },
             );
             return { ...base, language: 'ts', content: rendered.content };
           }
@@ -208,7 +244,9 @@ export const nestjsGenerator: CodeGenerator = {
         const model = responseModelOf(operationId, api);
         if (model.kind !== 'void' && model.kind !== 'raw') {
           if (rest === responsePathOf(operationId)) {
-            const rendered = renderResponseClasses(typeCtx, operationId, api);
+            const rendered = renderResponseClasses(typeCtx, operationId, api, {
+              swagger: ir.settings.backend.swagger,
+            });
             if (rendered !== undefined) return { ...base, language: 'ts', content: rendered.content };
           }
         }
@@ -219,7 +257,17 @@ export const nestjsGenerator: CodeGenerator = {
       case 'prisma/schema.prisma':
         return { ...base, language: 'prisma', content: emitPrismaSchema(ir).schema };
       case 'src/main.ts':
-        return { ...base, language: 'ts', content: renderMainTs(irHash) };
+        return {
+          ...base,
+          language: 'ts',
+          content: renderMainTs(irHash, { swagger: ir.settings.backend.swagger, title: ir.project.name }),
+        };
+      case 'src/common/pagination.dto.ts':
+        return { ...base, language: 'ts', content: renderPaginationDto(irHash) };
+      case 'src/common/http-exception.filter.ts':
+        return { ...base, language: 'ts', content: renderExceptionFilter(irHash) };
+      case 'src/common/response.interceptor.ts':
+        return { ...base, language: 'ts', content: renderResponseInterceptor(irHash) };
       case 'src/app.module.ts':
         return { ...base, language: 'ts', content: renderAppModule({ ir, irHash, groups }) };
       case 'src/prisma/prisma.module.ts':

@@ -126,7 +126,7 @@ function arrayItemValidators(item: string): string[] {
   }
 }
 
-function modelOf(ctx: DtoFieldContext, field: Field): FieldModel {
+function modelOf(ctx: DtoFieldContext, field: Field, useSwagger: boolean): FieldModel {
   const optional = isOptionalField(field);
   const description = field.comment ?? field.description;
   const swagger: string[] = [];
@@ -143,8 +143,12 @@ function modelOf(ctx: DtoFieldContext, field: Field): FieldModel {
   if (field.example !== undefined) extra.push(`example: ${JSON.stringify(field.example)}`);
   if (field.deprecated === true) extra.push('deprecated: true');
 
-  const decorator = optional ? 'ApiPropertyOptional' : 'ApiProperty';
-  swagger.push(extra.length > 0 ? `@${decorator}({ ${extra.join(', ')} })` : `@${decorator}()`);
+  // swagger 关闭时不生成文档装饰器：package.json 里也没有 @nestjs/swagger，
+  // 生成了就是 import 一个不存在的包
+  if (useSwagger) {
+    const decorator = optional ? 'ApiPropertyOptional' : 'ApiProperty';
+    swagger.push(extra.length > 0 ? `@${decorator}({ ${extra.join(', ')} })` : `@${decorator}()`);
+  }
 
   return {
     field,
@@ -172,14 +176,20 @@ export interface RenderedDto {
   content: string;
 }
 
-export function renderDto(ctx: DtoFieldContext, spec: DtoSpec): RenderedDto {
+export interface RenderDtoOptions {
+  /** 生成 @nestjs/swagger 装饰器，默认 true（与 settings.backend.swagger 一致） */
+  swagger?: boolean;
+}
+
+export function renderDto(ctx: DtoFieldContext, spec: DtoSpec, options: RenderDtoOptions = {}): RenderedDto {
+  const useSwagger = options.swagger ?? true;
   const w = new Writer();
   // readOnly 字段（id、createdAt、写入方是服务端的字段）绝不进请求 DTO：
   // 放进去等于把「客户端可以覆盖主键」写进契约，这是最常见的越权写入来源。
   // 过滤放在这里而不是调用方，是因为调用方有三处（plan / controller / 直调），
   // 只要漏一处就会有一条路径把 readOnly 字段漏出去。
   const requestFields = spec.fields.filter((f) => f.readOnly !== true);
-  const models = requestFields.map((f) => modelOf(ctx, f));
+  const models = requestFields.map((f) => modelOf(ctx, f, useSwagger));
 
   const validatorNames = new Set<string>();
   const usedEnums = new Set<string>();
@@ -200,7 +210,12 @@ export function renderDto(ctx: DtoFieldContext, spec: DtoSpec): RenderedDto {
     }
   }
 
-  if (spec.extendsFrom !== undefined) usedSwagger.add('PartialType');
+  // PartialType 有两个来源：swagger 开着时从 @nestjs/swagger 拿（它会把字段一并
+  // 标成可选并保留文档元数据），关着时退到 @nestjs/mapped-types——后者是前者的底座，
+  // 不依赖 swagger 也能把字段变可选。
+  if (spec.extendsFrom !== undefined) {
+    if (useSwagger) usedSwagger.add('PartialType');
+  }
 
   const isPartial = spec.extendsFrom !== undefined;
 
@@ -211,6 +226,9 @@ export function renderDto(ctx: DtoFieldContext, spec: DtoSpec): RenderedDto {
   }
   if (usedSwagger.size > 0) {
     w.line(`import { ${[...usedSwagger].sort().join(', ')} } from '@nestjs/swagger';`);
+  }
+  if (!useSwagger && spec.extendsFrom !== undefined) {
+    w.line("import { PartialType } from '@nestjs/mapped-types';");
   }
   if (usedEnums.size > 0) {
     w.line(`import { ${[...usedEnums].sort().join(', ')} } from '@prisma/client';`);
