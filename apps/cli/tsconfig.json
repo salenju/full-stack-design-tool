@@ -4,16 +4,39 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../../packages/core-ir" },
-    { "path": "../../packages/compiler" },
-    { "path": "../../packages/lint" },
-    { "path": "../../packages/sample" },
-    { "path": "../../packages/exporter" },
-    { "path": "../../packages/generators/runtime" },
-    { "path": "../../packages/generators/vue" },
-    { "path": "../../packages/generators/nestjs" },
-    { "path": "../../packages/importer" }
+    {
+      "path": "../../packages/core-ir"
+    },
+    {
+      "path": "../../packages/compiler"
+    },
+    {
+      "path": "../../packages/lint"
+    },
+    {
+      "path": "../../packages/sample"
+    },
+    {
+      "path": "../../packages/exporter"
+    },
+    {
+      "path": "../../packages/generators/runtime"
+    },
+    {
+      "path": "../../packages/generators/vue"
+    },
+    {
+      "path": "../../packages/generators/nestjs"
+    },
+    {
+      "path": "../../packages/importer"
+    },
+    {
+      "path": "../server"
+    }
   ]
 }

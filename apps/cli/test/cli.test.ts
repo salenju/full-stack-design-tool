@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { EXIT_FAIL, EXIT_OK, EXIT_USAGE, UsageError } from '../src/io.js';
 import { runCli } from '../src/main.js';
 import { diffIR } from '../src/commands/diff.js';
 import { relativeOutputRoot } from '../src/commands/gen.js';
+import { startServe } from '../src/commands/serve.js';
 import { COMMANDS } from '../src/help.js';
 
 // ────────────────────────────── 测试脚手架 ──────────────────────────────
@@ -454,6 +456,54 @@ describe('gen 命令', () => {
     expect(relativeOutputRoot('/a/b', './output')).toBe('output');
     expect(relativeOutputRoot('/a/b', 'out/nested')).toBe('out/nested');
     expect(relativeOutputRoot('/a/b', '.')).toBe('');
+  });
+});
+
+// ────────────────────────────── link / serve ──────────────────────────────
+
+describe('link 命令', () => {
+  it('把仓库的 design/ 登记成服务模式里的项目，重复 link 幂等', async () => {
+    const { dir: root } = await projectWithIr();
+    const home = await mkdtemp(join(tmpdir(), 'fsdt-home-'));
+
+    const first = capture(root, { FSDT_HOME: home });
+    expect(await runCli(['link', '.'], first)).toBe(EXIT_OK);
+    const projectId = first.stdoutText.trim();
+    expect(projectId.startsWith('prj_')).toBe(true);
+    expect(existsSync(join(home, 'index.sqlite'))).toBe(true);
+
+    // 幂等：同一个目录再 link 一次，不该多出一个同名项目
+    const second = capture(root, { FSDT_HOME: home });
+    expect(await runCli(['link', '.'], second)).toBe(EXIT_OK);
+    expect(second.stdoutText.trim()).toBe(projectId);
+  });
+
+  it('目录里没有 ir.json 时给用法错误（而不是建一个空项目）', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fsdt-nolink-'));
+    const home = await mkdtemp(join(tmpdir(), 'fsdt-home-'));
+    const ctx = capture(root, { FSDT_HOME: home });
+    expect(await runCli(['link', '.'], ctx)).toBe(EXIT_USAGE);
+    expect(ctx.stderrText).toContain('ir.json');
+  });
+});
+
+describe('serve 命令', () => {
+  it('能在随机端口起服务并响应健康检查', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'fsdt-home-'));
+    const ctx = capture(tmpdir(), { FSDT_HOME: home });
+    const { running } = await startServe(parseArgs(['serve', '--port', '0']), ctx);
+    try {
+      const res = await fetch(`${running.url}/api/health`);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it('--port 非法时报用法错误', async () => {
+    const ctx = capture(tmpdir(), { FSDT_HOME: await mkdtemp(join(tmpdir(), 'fsdt-home-')) });
+    expect(await runCli(['serve', '--port', 'abc'], ctx)).toBe(EXIT_USAGE);
   });
 });
 

@@ -23,6 +23,8 @@ import { runExportCommand } from './commands/export.js';
 import { runInitCommand } from './commands/init.js';
 import { runDiffCommand } from './commands/diff.js';
 import { runImportCommand } from './commands/import.js';
+import { runServeCommand } from './commands/serve.js';
+import { runLinkCommand } from './commands/link.js';
 
 export type CommandRunner = (args: ParsedArgs, ctx: CommandContext) => Promise<number>;
 
@@ -35,6 +37,8 @@ export const RUNNERS: Record<string, CommandRunner> = {
   export: runExportCommand,
   diff: runDiffCommand,
   import: runImportCommand,
+  serve: runServeCommand,
+  link: runLinkCommand,
 };
 
 /**

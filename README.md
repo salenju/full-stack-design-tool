@@ -84,6 +84,8 @@ pnpm dev        # → http://localhost:5180
 | `export` | 画布导出为图 | 仅 `--out` |
 | `diff` | IR 语义 diff（坐标变化不算变化） | 否 |
 | `import` | 设计图 → 字段候选（需人工确认） | 仅 `apply` |
+| `serve` | 启动服务模式（多项目 / 快照 / 生成历史） | — |
+| `link` | 把仓库的 `design/` 登记成服务模式里的项目 | 是（写索引） |
 
 退出码：`0` 成功 / `1` 校验失败或存在差异 / `2` 用法错误。
 
@@ -97,6 +99,7 @@ pnpm dev        # → http://localhost:5180
 
 ```
 apps/cli                      命令行
+apps/server                   服务模式（HTTP API / 快照 / 生成任务）
 apps/web                      画布工作台（Vue 3 + Vue Flow + Element Plus）
 packages/core-ir              IR 类型 / Zod schema / 校验 / 语义哈希 / 迁移
 packages/compiler             IR → OpenAPI 3.1 + UI Schema
@@ -104,7 +107,7 @@ packages/sample               确定性示例数据（内置 PRNG，不用 faker
 packages/lint                 L001–L014 规则 + SARIF
 packages/exporter             SVG / PNG / Mermaid / draw.io / JSON / Figma
 packages/importer             Figma / 视觉模型 → 字段候选
-packages/generators/runtime   Writer / 区块标记 / manifest
+packages/generators/runtime   Writer / 区块标记 / 三方合并 / manifest
 packages/generators/vue       Vue 3 + Element Plus
 packages/generators/nestjs    NestJS 12 + Prisma
 ```
@@ -130,7 +133,7 @@ pnpm verify            # 一条命令跑完下面全部
 pnpm build             # 全包 tsc -b（含 apps/web 的 vue-tsc + vite build）
 pnpm typecheck         # tsc -b + 逐包 typecheck
 pnpm typecheck:tests   # 逐包检查测试文件类型
-pnpm test              # 730 条单测
+pnpm test              # 752 条单测
 pnpm smoke             # 端到端：真跑一遍全部 CLI 命令
 pnpm dev               # 画布工作台（http://localhost:5180）
 ```
@@ -142,6 +145,55 @@ pnpm dev               # 画布工作台（http://localhost:5180）
 
 `pnpm verify` 的每一步在 CI（`.github/workflows/ci.yml`）里都有对应：本地跑什么、
 CI 就跑什么，避免「本地绿、CI 红」之后大家开始改 CI 而不是改代码。
+
+## 服务模式（多项目 / 快照 / 生成历史）
+
+文件模式（`design/ir.json` + git）是默认形态，适合 CLI、CI 和多人评审。
+但它没有「多项目」「快照回滚」「生成历史」这些东西——所以另有一套服务模式：
+
+```bash
+fsdt serve                      # 默认 http://127.0.0.1:4590，数据在 ~/.fsdt
+fsdt link . --name 设备管理平台   # 把当前仓库的 design/ 登记成一个项目
+```
+
+| 场景 | 权威存储 | 写入方式 |
+|---|---|---|
+| `fsdt gen --ir design/ir.json`（文件模式） | 仓库内文件 | CLI 直接读写，**不碰** `~/.fsdt/` |
+| `fsdt serve`（服务模式） | `~/.fsdt/` | 客户端走 HTTP `/api/*`，服务直接写盘 |
+| `fsdt link` 之后 | 仓库里的 `design/` | UI 与 CLI 编辑同一份文件，靠 `If-Match` 哈希互不覆盖 |
+
+存储布局：
+
+```
+~/.fsdt/
+├── index.sqlite                 # 项目索引 + 快照元数据（Node 自带 node:sqlite，无原生依赖）
+└── projects/<id>/
+    ├── project.json             # 项目元数据 + settings + 字典
+    ├── canvases/<canvasId>.ir.json   # 按画布拆分：保存时只写变动画布
+    ├── snapshots/<id>.json      # 全量 IR 快照，可回滚
+    ├── output/                  # 最近一次生成产物
+    └── generations/<gid>/       # 历史生成（manifest + 产物快照）
+```
+
+主要端点（完整表见 `apps/server/src/http.ts`）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET`/`POST` | `/api/projects` | 项目列表 / 新建 |
+| `GET` | `/api/projects/:id/ir` | 读 IR（`?canvas=all\|<id>`） |
+| `PUT` | `/api/projects/:id/canvases/:canvasId` | 写画布，**必须**带 `If-Match` |
+| `GET`/`POST` | `/api/projects/:id/snapshots` | 快照列表 / 建快照 |
+| `POST` | `/api/projects/:id/snapshots/:sid/restore` | 回滚 |
+| `POST` | `/api/projects/:id/lint` `/compile` | Lint 与编译预览 |
+| `POST` | `/api/projects/:id/generate/preview` | 生成预览（只算不写） |
+| `POST` | `/api/projects/:id/generate` | 执行生成，返回 `jobId`，进度走 SSE |
+| `GET` | `/api/jobs/:jobId/events` | SSE：`job.created` / `job.progress` / `job.log` / `job.done` / `job.error` |
+| `GET` | `/api/projects/:id/download` | 打包下载（zip，`?gen=<gid>` 取历史某版） |
+
+两个刻意的选择：
+
+- **写画布必须带 `If-Match`**（IR 的语义哈希），缺失返回 428、不匹配返回 409 并附上服务端最新哈希。静默覆盖别人的编辑是这类工具最不可接受的故障。
+- **默认只监听 127.0.0.1**。这个服务能改项目文件、能生成代码，等价于本机写权限；要对外暴露请自己确认网络边界。
 
 ## 改过的代码还能重新生成（往返）
 

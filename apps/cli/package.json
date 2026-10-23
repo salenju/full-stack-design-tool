@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "fsdt 命令行：lint / compile / gen / sample / export / init / diff",
-  "bin": { "fsdt": "./dist/main.js" },
+  "description": "fsdt 命令行：lint / compile / gen / sample / export / init / diff / serve / link",
+  "bin": {
+    "fsdt": "./dist/main.js"
+  },
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
   "exports": {
@@ -13,7 +15,9 @@
       "default": "./dist/main.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo"
@@ -27,6 +31,7 @@
     "@fsdt/generators-runtime": "workspace:*",
     "@fsdt/importer": "workspace:*",
     "@fsdt/lint": "workspace:*",
-    "@fsdt/sample": "workspace:*"
+    "@fsdt/sample": "workspace:*",
+    "@fsdt/server": "workspace:*"
   }
 }

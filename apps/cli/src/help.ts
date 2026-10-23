@@ -127,6 +127,30 @@ export const COMMANDS: CommandDoc[] = [
     example: 'git show HEAD~1:design/ir.json > /tmp/base.json && fsdt diff --from /tmp/base.json',
     needsIr: true,
   },
+  {
+    name: 'serve',
+    summary: '启动服务模式（多项目 / 快照 / 生成历史，默认只监听 127.0.0.1）',
+    usage: 'fsdt serve [--port <n>] [--host <addr>] [--home <dir>] [--allow-origin <url>…]',
+    options: [
+      { flag: '--port <n>', desc: '监听端口，默认 4590（0 表示随机端口）' },
+      { flag: '--host <addr>', desc: '监听地址，默认 127.0.0.1' },
+      { flag: '--home <dir>', desc: '数据目录，默认 ~/.fsdt（也可用 FSDT_HOME）' },
+      { flag: '--allow-origin <url>', desc: '额外允许的跨域来源，可重复' },
+    ],
+    example: 'fsdt serve --port 4590',
+    needsIr: false,
+  },
+  {
+    name: 'link',
+    summary: '把仓库的 design/ 登记为服务模式里的项目（UI 与 CLI 编辑同一份文件）',
+    usage: 'fsdt link [路径] [--name <名>] [--home <dir>]',
+    options: [
+      { flag: '--name <名>', desc: '项目名，默认取 IR 里的项目名' },
+      { flag: '--home <dir>', desc: '索引所在目录，默认 ~/.fsdt' },
+    ],
+    example: 'fsdt link . --name 设备管理平台',
+    needsIr: false,
+  },
 ];
 
 export function globalHelp(): string {

@@ -98,13 +98,23 @@ $CLI export --format svg,mermaid,drawio,json --out ./docs >/dev/null 2>&1 || fai
 [ -f "docs/画布-1.svg" ] || fail "export 没产出一画布的 svg"
 ok "sample / export"
 
-# ── 11. --check 与 --out 必须互斥（否则 CI 永远绿）───────────────────
+# ── 11. 服务模式：link 把仓库登记成项目（索引写在独立目录里）────────
+FSDT_HOME="$WORK/fsdt-home"
+export FSDT_HOME
+LINK_ID=$($CLI link . 2>/dev/null) || fail "link 失败"
+[ -f "$FSDT_HOME/index.sqlite" ] || fail "link 没有建索引"
+# 幂等：再 link 一次拿到同一个项目 ID
+LINK_ID2=$($CLI link . 2>/dev/null) || fail "重复 link 失败"
+[ "$LINK_ID" = "$LINK_ID2" ] || fail "重复 link 产生了不同的项目 ID"
+ok "link（服务模式登记）"
+
+# ── 12. --check 与 --out 必须互斥（否则 CI 永远绿）───────────────────
 if $CLI gen --check --out ./output >/dev/null 2>&1; then
   fail "--check 与 --out 同时给却没报错"
 fi
 ok "--check 与 --out 互斥"
 
-# ── 12. 二进制不能往终端吐 ──────────────────────────────────────────
+# ── 13. 二进制不能往终端吐 ──────────────────────────────────────────
 if $CLI export --format png >/dev/null 2>&1; then
   fail "png 没有 --out 却没报错"
 fi

@@ -19,8 +19,8 @@ import { bareHash, computeSchemaHash, hashContent, validateIR } from '@fsdt/core
 import type { IR } from '@fsdt/core-ir';
 import { vueGenerator, GENERATOR_ID as VUE_ID, GENERATOR_VERSION as VUE_VERSION } from '@fsdt/generator-vue';
 import { nestjsGenerator, GENERATOR_ID as NEST_ID, GENERATOR_VERSION as NEST_VERSION } from '@fsdt/generator-nestjs';
-import { mergeRegions, regionsOf } from '@fsdt/generators-runtime';
-import type { CodeGenerator, Manifest, ManifestFile, RenderedFile } from '@fsdt/generators-runtime';
+import { decideWrite, manifestEntryOf, mergeRegions } from '@fsdt/generators-runtime';
+import type { CodeGenerator, Manifest, ManifestFile, RenderedFile, WriteDecision } from '@fsdt/generators-runtime';
 import { runLint } from '@fsdt/lint';
 import { flagBool, flagList, flagString, rejectUnknown, type ParsedArgs } from '../args.js';
 import type { CommandContext } from '../context.js';
@@ -81,75 +81,6 @@ async function renderTarget(spec: TargetSpec, ir: IR, projectRoot: string): Prom
   return files;
 }
 
-/**
- * manifest 条目。
- *
- * 存的必须是**纯净生成内容**（`file.content`）的哈希，不能是合并后的磁盘内容：
- * 合并结果里含用户手写部分，一旦记成基线，下次生成就会认为「没人改过」，
- * 直接覆盖——todo 区块里的实现当场丢失。
- */
-function manifestEntry(file: RenderedFile, manifestPath: string): ManifestFile {
-  const parsed = regionsOf(file.content);
-  return {
-    path: manifestPath,
-    hash: hashContent(file.content),
-    kind: file.kind,
-    sourceNodeIds: file.sourceNodeIds,
-    overwrite: file.overwrite,
-    regions:
-      parsed.length > 0
-        ? parsed
-        : file.regions.map((r) => ({ name: r.name, mode: r.mode, hash: r.hash })),
-  };
-}
-
-interface WriteDecision {
-  action: 'write' | 'merged' | 'unchanged' | 'conflict';
-  content: string;
-  /** 冲突原因，写进 stderr 让人知道该改哪里 */
-  reasons: string[];
-}
-
-/**
- * 决定一个已存在的文件该怎么处理。
- *
- * 优先级：内容相同 → 跳过；`--force` → 覆盖；`never` → 不碰；
- * 没被改过 → 覆盖；被改过 → 尝试区块合并，合不动才报冲突。
- */
-export function resolveWrite(
-  file: RenderedFile,
-  existing: string,
-  previous: ManifestFile | undefined,
-  force: boolean,
-): WriteDecision {
-  if (existing === file.content) return { action: 'unchanged', content: existing, reasons: [] };
-  if (force) return { action: 'write', content: file.content, reasons: [] };
-  if (file.overwrite === 'never') {
-    return { action: 'conflict', content: existing, reasons: ['文件标记为不可覆盖（只在不存在时写入）'] };
-  }
-
-  const handEdited = previous !== undefined && hashContent(existing) !== previous.hash;
-  if (file.overwrite === 'always' || !handEdited) {
-    return { action: 'write', content: file.content, reasons: [] };
-  }
-
-  const merged = mergeRegions(file.content, existing, previous?.regions ?? []);
-  if (merged.status === 'merged') return { action: 'merged', content: merged.content, reasons: [] };
-  if (merged.status === 'unchanged') return { action: 'unchanged', content: existing, reasons: [] };
-  if (merged.status === 'unmergeable') {
-    return {
-      action: 'conflict',
-      content: existing,
-      reasons: ['文件里没有 @dsg 区块标记，无法判断哪些是手写内容'],
-    };
-  }
-  return { action: 'conflict', content: existing, reasons: merged.conflicts.map(describeConflict) };
-}
-
-function describeConflict(conflict: { region: string; reason: string }): string {
-  if (conflict.reason === 'removed-region') return `区块 ${conflict.region}：磁盘上有，但本次生成不再产出`;
-  return `区块 ${conflict.region}：生成的内容被手工改过，无法自动抉择`;
-}
 
 export interface GenOutcome {
   /** 计划写但未写的文件（预览） */
@@ -276,13 +207,13 @@ export async function runGenCommand(args: ParsedArgs, ctx: CommandContext): Prom
       const diskPath = join(root, manifestPath);
       outcome.planned.push(manifestPath);
       // 基线永远记纯净生成内容，与本次写出去的是不是合并结果无关
-      manifestFiles.push(manifestEntry(file, manifestPath));
+      manifestFiles.push(manifestEntryOf(file, manifestPath));
 
       const onDisk = existsSync(diskPath) ? await readFile(diskPath, 'utf8') : undefined;
       const decision =
         onDisk === undefined
           ? ({ action: 'write', content: file.content, reasons: [] } as WriteDecision)
-          : resolveWrite(file, onDisk, previousFiles.get(manifestPath), force);
+          : decideWrite(file, onDisk, previousFiles.get(manifestPath), force);
 
       switch (decision.action) {
         case 'unchanged':

@@ -1,0 +1,28 @@
+{
+  "name": "@fsdt/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "服务模式：项目索引 / 画布读写 / 快照 / 生成任务与 SSE 进度",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@fsdt/compiler": "workspace:*",
+    "@fsdt/core-ir": "workspace:*",
+    "@fsdt/generator-nestjs": "workspace:*",
+    "@fsdt/generator-vue": "workspace:*",
+    "@fsdt/generators-runtime": "workspace:*",
+    "@fsdt/lint": "workspace:*"
+  }
+}

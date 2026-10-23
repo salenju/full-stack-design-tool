@@ -27,6 +27,9 @@ export type { Manifest, ManifestDiff, ManifestFile, ManifestRegion } from './man
 export { mergeRegions, regionsOf } from './merge.js';
 export type { MergeConflict, MergeConflictReason, MergeResult, MergeStatus } from './merge.js';
 
+export { decideWrite, describeConflict, manifestEntryOf } from './write-decision.js';
+export type { WriteAction, WriteDecision } from './write-decision.js';
+
 export type {
   CodeGenerator,
   CompileContext,

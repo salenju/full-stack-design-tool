@@ -50,6 +50,30 @@ importers:
       '@fsdt/sample':
         specifier: workspace:*
         version: link:../../packages/sample
+      '@fsdt/server':
+        specifier: workspace:*
+        version: link:../server
+
+  apps/server:
+    dependencies:
+      '@fsdt/compiler':
+        specifier: workspace:*
+        version: link:../../packages/compiler
+      '@fsdt/core-ir':
+        specifier: workspace:*
+        version: link:../../packages/core-ir
+      '@fsdt/generator-nestjs':
+        specifier: workspace:*
+        version: link:../../packages/generators/nestjs
+      '@fsdt/generator-vue':
+        specifier: workspace:*
+        version: link:../../packages/generators/vue
+      '@fsdt/generators-runtime':
+        specifier: workspace:*
+        version: link:../../packages/generators/runtime
+      '@fsdt/lint':
+        specifier: workspace:*
+        version: link:../../packages/lint
 
   apps/web:
     dependencies:
