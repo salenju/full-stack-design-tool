@@ -13,6 +13,8 @@ export {
   LINT_RULES,
   pathParamsOf,
 } from './rules.js';
+export { applyFixes, summarizeFixes } from './fixes.js';
+export type { ApplyFixResult, SkippedFix } from './fixes.js';
 export type {
   LintContext,
   LintFix,

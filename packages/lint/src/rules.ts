@@ -13,7 +13,15 @@
  *    这样 Lint 保持纯函数，可以在服务端、CLI、CI 里跑而没有任何副作用。
  */
 
-import { buildGraphIndex, toCamelCase, type IR, type IREdge, type PageComponent, type PageNode } from '@fsdt/core-ir';
+import {
+  buildGraphIndex,
+  toCamelCase,
+  validateIR,
+  type IR,
+  type IREdge,
+  type PageComponent,
+  type PageNode,
+} from '@fsdt/core-ir';
 
 // ────────────────────────────── 类型 ──────────────────────────────
 
@@ -74,6 +82,13 @@ export interface LintOptions {
    * 两份形状不同的忽略结构必然会有一处忘同步，然后在「忽略不生效」上浪费半天。
    */
   ignores?: Array<{ ruleId: string; targetId: string; reason?: string }>;
+  /**
+   * 把 IR 的基础语义诊断（IR001–IR012）也合并进 issues。
+   *
+   * 默认关闭：库的调用方（比如某些 CI 只关心契约规则）不该被底层诊断淹没。
+   * CLI 的 `lint` 与工作台会打开它——「gen 拦住但 lint 说没问题」最难排查。
+   */
+  includeIRDiagnostics?: boolean;
 }
 
 export interface LintResult {
@@ -675,6 +690,29 @@ export function runLint(ir: IR, options: LintOptions = {}): LintResult {
       } else {
         issues.push(issue);
       }
+    }
+  }
+
+  // IR 的语义诊断（IR00x）默认不混进来：它说的是「IR 本身不成立」，比「契约有坏味道」
+  // 更底层，定位手段也不同（IR002 指向字段，L007 指向接口策略）。
+  // 但 CLI 与工作台需要「一次看到全部问题」，否则会出现「gen 拦住了、lint 说 0 问题」
+  // 这种自相矛盾的体验，所以给一个显式开关。
+  if (options.includeIRDiagnostics === true) {
+    for (const diagnostic of validateIR(ir)) {
+      if (diagnostic.severity === 'info') continue;
+      issues.push({
+        ruleId: diagnostic.code,
+        severity: diagnostic.severity,
+        message: diagnostic.message,
+        target: {
+          ...(diagnostic.target.nodeId !== undefined ? { nodeId: diagnostic.target.nodeId } : {}),
+          ...(diagnostic.target.fieldId !== undefined ? { fieldId: diagnostic.target.fieldId } : {}),
+          ...(diagnostic.target.edgeId !== undefined ? { edgeId: diagnostic.target.edgeId } : {}),
+          ...(diagnostic.target.componentId !== undefined
+            ? { componentId: diagnostic.target.componentId }
+            : {}),
+        },
+      });
     }
   }
 

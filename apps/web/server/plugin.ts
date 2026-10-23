@@ -30,6 +30,7 @@ const ROUTES: Route[] = [
   { method: 'GET', path: '/api/state', handler: (ctx) => h.getState(ctx) },
   { method: 'PUT', path: '/api/ir', handler: (ctx, body) => h.putIR(ctx, body) },
   { method: 'POST', path: '/api/lint', handler: (ctx, body) => h.postLint(ctx, body) },
+  { method: 'POST', path: '/api/lint/fix', handler: (ctx, body) => h.postLintFix(ctx, body) },
   { method: 'POST', path: '/api/compile', handler: (ctx, body) => h.postCompile(ctx, body) },
   { method: 'POST', path: '/api/gen', handler: (ctx, body) => h.postGen(ctx, body) },
   { method: 'POST', path: '/api/export', handler: (ctx, body) => h.postExport(ctx, body) },

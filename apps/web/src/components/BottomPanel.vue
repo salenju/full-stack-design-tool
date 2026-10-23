@@ -161,6 +161,15 @@ function copy(text: string): void {
             <span class="stat stat--info">{{ ui.lint.stats.info }} 提示</span>
             <span v-if="ui.lint.blocked" class="stat stat--blocked">会阻断 CI</span>
             <span v-if="ui.lint.ignored.length > 0" class="stat">已忽略 {{ ui.lint.ignored.length }}</span>
+            <button
+              v-if="ui.fixableCount > 0"
+              class="lint__autofix"
+              type="button"
+              :disabled="ui.busy !== null"
+              @click="ui.runLintFix()"
+            >
+              一键修复 {{ ui.fixableCount }} 项
+            </button>
           </div>
           <div v-if="ui.issues.length === 0" class="pane__empty">没有发现问题。</div>
           <div v-else class="lint__list">
@@ -445,6 +454,27 @@ function copy(text: string): void {
   background: #dc2626;
   border-radius: 3px;
   padding: 0 5px;
+}
+
+.lint__autofix {
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 5px;
+  padding: 2px 9px;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.lint__autofix:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.lint__autofix:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .lint__list {

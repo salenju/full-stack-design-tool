@@ -38,6 +38,7 @@ export const useUiStore = defineStore('ui', () => {
   const issues = computed<LintIssue[]>(() => lint.value?.issues ?? []);
   const errorCount = computed(() => lint.value?.stats.error ?? 0);
   const warnCount = computed(() => lint.value?.stats.warn ?? 0);
+  const fixableCount = computed(() => issues.value.filter((i) => i.fix !== undefined).length);
 
   function notify(type: 'success' | 'error' | 'info', text: string): void {
     message.value = { type, text };
@@ -95,8 +96,26 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
-  async function runCompile(): Promise<void> {
+  /**
+   * 一键修复。修复后的 IR 整体替换进 store（走 replaceIR，所以可撤销），
+   * 再重跑一次 Lint —— 面板上要看到「修完之后还剩什么」，而不是修之前那份。
+   */
+  async function runLintFix(): Promise<void> {
     const ir = project.ir;
+    if (ir === null) return;
+    const result = await guard('fix', () => api.lintFix(ir));
+    if (result === null) return;
+    if (result.applied.length === 0) {
+      notify('info', result.skipped.length > 0 ? '这些问题需要手工处理' : '没有可自动修复的问题');
+      return;
+    }
+    project.replaceIR(result.ir);
+    await runLint({ silent: true });
+    const tail = result.skipped.length > 0 ? `，${String(result.skipped.length)} 项需手工处理` : '';
+    notify('success', `已修复 ${String(result.applied.length)} 项${tail}`);
+  }
+
+  async function runCompile(): Promise<void> {    const ir = project.ir;
     if (ir === null) return;
     const result = await guard('compile', () => api.compile(ir));
     if (result !== null) {
@@ -148,11 +167,13 @@ export const useUiStore = defineStore('ui', () => {
     issues,
     errorCount,
     warnCount,
+    fixableCount,
     notify,
     select,
     selectEdge,
     focus,
     runLint,
+    runLintFix,
     runCompile,
     runGen,
     runExport,

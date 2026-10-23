@@ -47,25 +47,28 @@ export const COMMANDS: CommandDoc[] = [
   {
     name: 'lint',
     summary: '跑契约规则检查，三种输出格式',
-    usage: 'fsdt lint [--format text|json|sarif] [--fail-on error|warn|info|none] [--only <规则>] [--except <规则>]',
+    usage:
+      'fsdt lint [--format text|json|sarif] [--fail-on error|warn|info|none] [--only <规则>] [--except <规则>] [--fix]',
     options: [
       { flag: '--format', desc: 'text（人看）| json（脚本）| sarif（GitHub Code Scanning）' },
       { flag: '--fail-on', desc: '达到该级别即退出码 1，默认 error' },
       { flag: '--only <L00x>', desc: '只跑指定规则，可重复或逗号分隔' },
       { flag: '--except <L00x>', desc: '跳过指定规则' },
+      { flag: '--fix', desc: '应用可自动修复的问题并写回 IR（枚举取值等无法推断的会跳过）' },
     ],
-    example: 'fsdt lint --format sarif > lint.sarif',
+    example: 'fsdt lint --fix',
     needsIr: true,
   },
   {
     name: 'gen',
     summary: 'IR → Vue 前端 + NestJS 后端代码（默认只预览）',
-    usage: 'fsdt gen [--target vue,nestjs] [--out <dir>] [--check] [--force]',
+    usage: 'fsdt gen [--target vue,nestjs] [--out <dir>] [--check] [--force] [--skip-verify]',
     options: [
       { flag: '--target', desc: 'vue | nestjs，默认两者' },
       { flag: '--out <dir>', desc: '实际写盘；不给则只列出将生成的文件' },
       { flag: '--check', desc: '漂移检测：产物与画布不一致时退出码 1（与 --out 互斥）' },
       { flag: '--force', desc: '覆盖手改过的文件' },
+      { flag: '--skip-verify', desc: '跳过生成前的 IR 语义校验与 Lint error 门禁' },
     ],
     example: 'fsdt gen --out ./output',
     needsIr: true,

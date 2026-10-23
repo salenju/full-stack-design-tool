@@ -17,7 +17,7 @@ import type { ExportFormat } from '@fsdt/exporter';
 import { nestjsGenerator } from '@fsdt/generator-nestjs';
 import { vueGenerator } from '@fsdt/generator-vue';
 import type { CodeGenerator, FilePlan, RenderedFile } from '@fsdt/generators-runtime';
-import { runLint } from '@fsdt/lint';
+import { applyFixes, runLint } from '@fsdt/lint';
 import type { LintResult } from '@fsdt/lint';
 
 import { loadState, saveState, type WorkspaceInfo } from './workspace.js';
@@ -98,8 +98,36 @@ export async function putIR(ctx: ApiContext, body: unknown): Promise<unknown> {
 
 export async function postLint(_ctx: ApiContext, body: unknown): Promise<LintResult & { schemaHash: string }> {
   const ir = asIR((body as { ir?: unknown }).ir);
-  const result = runLint(ir);
+  // 与 CLI 一致：面板里也要能看到 IR00x，否则「gen 被拦但 Lint 全绿」无法解释
+  const result = runLint(ir, { includeIRDiagnostics: true });
   return { ...result, schemaHash: computeSchemaHash(ir) };
+}
+
+export interface LintFixResponse {
+  ir: IR;
+  applied: Array<{ ruleId: string; message: string }>;
+  skipped: Array<{ ruleId: string; message: string; reason: string }>;
+}
+
+/**
+ * 一键修复。
+ *
+ * 在服务端算而不是前端算：修复会改 IR，而「改 IR 的唯一实现」在 @fsdt/lint 里，
+ * 前端再实现一遍就有两份逻辑会漂移。前端只负责把返回的 IR 放进撤销栈。
+ */
+export async function postLintFix(_ctx: ApiContext, body: unknown): Promise<LintFixResponse> {
+  const ir = asIR((body as { ir?: unknown }).ir);
+  // 只拿可修的 L00x：IR00x 没有可执行修复（它们要求改结构，不是改命名）
+  const outcome = applyFixes(ir, runLint(ir).issues);
+  return {
+    ir: outcome.ir,
+    applied: outcome.applied.map((a) => ({ ruleId: a.issue.ruleId, message: a.issue.message })),
+    skipped: outcome.skipped.map((s) => ({
+      ruleId: s.issue.ruleId,
+      message: s.issue.message,
+      reason: s.reason,
+    })),
+  };
 }
 
 export async function postCompile(

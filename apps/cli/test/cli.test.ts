@@ -590,3 +590,43 @@ describe('import 命令', () => {
     expect(new UsageError('x').name).toBe('UsageError');
   });
 });
+
+describe('lint --fix', () => {
+  it('把可自动修复的问题改掉并写回 IR', async () => {
+    const fixture = buildFixture();
+    fixture.deviceNameField.name = 'Bad_Name';
+    fixture.listApi.api.query = [];
+
+    const root = await mkdtemp(join(tmpdir(), 'fsdt-cli-fix-'));
+    await mkdir(join(root, 'design'), { recursive: true });
+    const irPath = join(root, 'design', 'ir.json');
+    await saveIR(irPath, fixture.ir);
+
+    const ctx = capture(root);
+    const code = await runCli(['lint', '--fix'], ctx);
+
+    expect(ctx.stderrText).toContain('已修复');
+    expect(code === EXIT_OK || code === EXIT_FAIL).toBe(true);
+
+    const saved = JSON.parse(await readFile(irPath, 'utf8')) as {
+      nodes: Array<{ kind: string; table?: { fields: Array<{ name: string }> }; api?: { query: Array<{ name: string }> } }>;
+    };
+    const table = saved.nodes.find((n) => n.kind === 'table');
+    // toCamelCase('Bad_Name') → 'badName'，不是把名字猜成 deviceName
+    expect(table?.table?.fields.map((f) => f.name)).toContain('badName');
+
+    const listApi = saved.nodes.find((n) => n.kind === 'api' && n.api?.query.some((q) => q.name === 'page'));
+    expect(listApi).toBeDefined();
+  });
+
+  it('没有可修复项时不改文件，只给结论', async () => {
+    const { dir: root, irPath } = await projectWithIr();
+    const before = await readFile(irPath, 'utf8');
+
+    const ctx = capture(root);
+    await runCli(['lint', '--fix'], ctx);
+
+    expect(ctx.stderrText).toContain('没有可自动修复的问题');
+    expect(await readFile(irPath, 'utf8')).toBe(before);
+  });
+});

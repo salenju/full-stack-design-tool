@@ -56,6 +56,12 @@ export interface ExportResponse {
   base64?: string;
 }
 
+export interface LintFixResponse {
+  ir: IR;
+  applied: Array<{ ruleId: string; message: string }>;
+  skipped: Array<{ ruleId: string; message: string; reason: string }>;
+}
+
 class ApiFailure extends Error {
   constructor(
     message: string,
@@ -96,6 +102,7 @@ export const api = {
   state: () => request<StateResponse>('GET', '/api/state'),
   save: (ir: IR) => request<SaveResponse>('PUT', '/api/ir', { ir }),
   lint: (ir: IR) => request<LintResult & { schemaHash: string }>('POST', '/api/lint', { ir }),
+  lintFix: (ir: IR) => request<LintFixResponse>('POST', '/api/lint/fix', { ir }),
   compile: (ir: IR) => request<CompileResponse>('POST', '/api/compile', { ir }),
   gen: (ir: IR, options: { targets?: string[]; write?: boolean } = {}) =>
     request<GenResponse>('POST', '/api/gen', { ir, ...options }),

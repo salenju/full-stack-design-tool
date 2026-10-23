@@ -13,17 +13,18 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { bareHash, computeSchemaHash, hashContent } from '@fsdt/core-ir';
+import { bareHash, computeSchemaHash, hashContent, validateIR } from '@fsdt/core-ir';
 import type { IR } from '@fsdt/core-ir';
 import { vueGenerator, GENERATOR_ID as VUE_ID, GENERATOR_VERSION as VUE_VERSION } from '@fsdt/generator-vue';
 import { nestjsGenerator, GENERATOR_ID as NEST_ID, GENERATOR_VERSION as NEST_VERSION } from '@fsdt/generator-nestjs';
 import type { CodeGenerator, Manifest, ManifestFile, RenderedFile } from '@fsdt/generators-runtime';
+import { runLint } from '@fsdt/lint';
 import { flagBool, flagList, flagString, rejectUnknown, type ParsedArgs } from '../args.js';
 import type { CommandContext } from '../context.js';
 import { EXIT_FAIL, EXIT_OK, UsageError, rel, writeText } from '../io.js';
 import { findIr, loadIrFrom, manifestPathOf, type IrSource } from '../ir-source.js';
 
-const ALLOWED = ['ir', 'out', 'target', 'check', 'force', 'help'];
+const ALLOWED = ['ir', 'out', 'target', 'check', 'force', 'skip-verify', 'help'];
 
 export interface TargetSpec {
   id: string;
@@ -126,6 +127,19 @@ export function summarize(stacks: Array<{ spec: TargetSpec; outcome: GenOutcome 
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * 生成前该拦下的问题：IR 语义错误（IR00x）+ error 级契约规则。
+ *
+ * 只拦 error 不拦 warn：存量 warn 清不完的项目会被永久卡住，用户只能天天加
+ * `--skip-verify`，门禁等于不存在。error 才是「生成出来必然是错的」那一档。
+ */
+function collectBlockingProblems(ir: IR): string[] {
+  // includeIRDiagnostics 让 Lint 顺带把 IR00x 报出来，这里不必再单独跑一遍 validateIR
+  return runLint(ir, { includeIRDiagnostics: true })
+    .issues.filter((issue) => issue.severity === 'error')
+    .map((issue) => `[${issue.ruleId}] ${issue.message}`);
+}
+
 export async function runGenCommand(args: ParsedArgs, ctx: CommandContext): Promise<number> {
   const unknown = rejectUnknown(args, ALLOWED);
   if (unknown.length > 0) throw new UsageError(unknown.join('\n'));
@@ -141,6 +155,22 @@ export async function runGenCommand(args: ParsedArgs, ctx: CommandContext): Prom
 
   const source = findIr(ctx.cwd, flagString(args, 'ir'));
   const { ir } = await loadIrFrom(source);
+
+  // 门禁：读文件只做了 Zod 结构校验（IR000），语义错误（IR002 之类的 ID 重复、
+  // 悬空外键）和 Lint 的 error 级问题都不会被 loadIR 拦住。曾经因此把一份
+  // 18 处字段 ID 重复的 IR 一路生成出 31 个文件。
+  if (!flagBool(args, 'skip-verify')) {
+    const problems = collectBlockingProblems(ir);
+    if (problems.length > 0) {
+      ctx.io.stderr(`✗ IR 未通过校验（${problems.length} 个错误），已中止生成：`);
+      for (const line of problems.slice(0, 12)) ctx.io.stderr(`  • ${line}`);
+      if (problems.length > 12) ctx.io.stderr(`  …另有 ${problems.length - 12} 个`);
+      ctx.io.stderr('');
+      ctx.io.stderr('先跑 `fsdt lint` 看全量报告；确认要强行生成请加 --skip-verify。');
+      return EXIT_FAIL;
+    }
+  }
+
   const targets = resolveTargets(flagList(args, 'target'));
   const schemaHash = computeSchemaHash(ir);
 
