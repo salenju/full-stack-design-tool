@@ -39,6 +39,8 @@ type TableSchema = Extract<ComponentSchema, { type: 'table' }>;
 type FormSchema = Extract<ComponentSchema, { type: 'form' }>;
 type DetailSchema = Extract<ComponentSchema, { type: 'detail' }>;
 type ActionGroupSchema = Extract<ComponentSchema, { type: 'action' }>;
+type TabsSchema = Extract<ComponentSchema, { type: 'tabs' }>;
+type CardSchema = Extract<ComponentSchema, { type: 'card' }>;
 
 /** 页面在生成阶段要用到的全部信息，一次算清避免各函数重复推导 */
 interface PageModel {
@@ -123,6 +125,15 @@ export const vueGenerator: CodeGenerator = {
   version: GENERATOR_VERSION,
 
   plan(ir: IR): FilePlan[] {
+    // 静默生成错误的 UI 库代码比报错更糟：用户会拿到一堆 naive-ui 项目里不存在的
+    // el-* 组件，然后在「为什么组件不渲染」上耗半天。宁可在生成阶段直接失败。
+    if (ir.settings.frontend.ui !== 'element-plus') {
+      throw new Error(
+        `前端 UI 库「${ir.settings.frontend.ui}」暂不支持：Vue 生成器只实现了 element-plus。` +
+          '请把 settings.frontend.ui 改回 element-plus。',
+      );
+    }
+
     const { pages } = emitUiSchema(ir, { viewsDir: 'src/views' });
     const plans: FilePlan[] = [];
 
@@ -280,7 +291,12 @@ export function renderPageComponent(model: PageModel, _ctx: CompileContext): str
   );
   w.line('<template>');
   w.line('  <div class="page">');
-  for (const component of page.components) renderTemplate(w, component, model);
+  // 被 tabs / card 容器引用的组件在容器内部渲染；顶层必须跳过，否则同一个组件会出现两份
+  const nested = nestedComponentIds(page.components);
+  for (const component of page.components) {
+    if (nested.has(component.id)) continue;
+    renderTemplate(w, component, model);
+  }
   w.line('  </div>');
   w.line('</template>');
   w.blank();
@@ -311,7 +327,39 @@ function attr(value: string): string {
   return `"${value.replace(/"/g, '&quot;')}"`;
 }
 
+/** 被容器引用的组件 id（扁平列表里可能存在多层引用，遍历一遍即可全部覆盖） */
+function nestedComponentIds(components: ComponentSchema[]): Set<string> {
+  const out = new Set<string>();
+  for (const component of components) {
+    if (component.type === 'tabs') {
+      for (const tab of component.tabs) for (const id of tab.componentIds) out.add(id);
+    } else if (component.type === 'card') {
+      for (const id of component.componentIds) out.add(id);
+    }
+  }
+  return out;
+}
+
+/** 受限表达式写进 HTML 属性：双引号必须转义，否则属性会被表达式里的引号截断 */
+function exprAttr(value: string): string {
+  return `"${value.replace(/"/g, '&quot;')}"`;
+}
+
 function renderTemplate(w: Writer, component: ComponentSchema, model: PageModel): void {
+  // visibleWhen 是「整体显隐」语义，所以包在外层而不是落到每个控件上：
+  // 表单里少一个控件和整块区域不显示，是两回事。
+  if (component.visibleWhen !== undefined) {
+    w.line(`    <template v-if=${exprAttr(component.visibleWhen)}>`);
+    w.indent();
+    renderComponentBody(w, component, model);
+    w.dedent();
+    w.line('    </template>');
+    return;
+  }
+  renderComponentBody(w, component, model);
+}
+
+function renderComponentBody(w: Writer, component: ComponentSchema, model: PageModel): void {
   switch (component.type) {
     case 'searchForm':
       renderSearchForm(w, component);
@@ -328,13 +376,50 @@ function renderTemplate(w: Writer, component: ComponentSchema, model: PageModel)
     case 'action':
       renderActionGroup(w, component);
       return;
-    case 'card':
     case 'tabs':
-      w.line(`    <!-- TODO: ${component.type} 容器尚未生成（P1，需按 componentIds 嵌套子组件） -->`);
+      renderTabs(w, component, model);
+      return;
+    case 'card':
+      renderCard(w, component, model);
       return;
     default:
       return;
   }
+}
+
+/** 容器里的子组件：按 id 回查扁平列表，找不到就留一条注释而不是静默丢弃 */
+function renderChild(w: Writer, componentId: string, model: PageModel): void {
+  const child = model.page.components.find((c) => c.id === componentId);
+  if (child === undefined) {
+    w.line(`    <!-- 容器引用了不存在的组件 ${componentId} -->`);
+    return;
+  }
+  renderTemplate(w, child, model);
+}
+
+function renderTabs(w: Writer, component: TabsSchema, model: PageModel): void {
+  w.line('    <el-tabs v-model="activeTab">');
+  w.indent();
+  for (const tab of component.tabs) {
+    w.line(`    <el-tab-pane label=${attr(tab.label)} name=${attr(tab.key)}>`);
+    w.indent();
+    for (const id of tab.componentIds) renderChild(w, id, model);
+    w.dedent();
+    w.line('    </el-tab-pane>');
+  }
+  w.dedent();
+  w.line('    </el-tabs>');
+}
+
+function renderCard(w: Writer, component: CardSchema, model: PageModel): void {
+  w.line(`    <el-card shadow=${attr(component.shadow)}>`);
+  if (component.title !== undefined) {
+    w.line(`      <template #header>${component.title}</template>`);
+  }
+  w.indent();
+  for (const id of component.componentIds) renderChild(w, id, model);
+  w.dedent();
+  w.line('    </el-card>');
 }
 
 function renderSearchForm(w: Writer, component: SearchFormSchema): void {
@@ -387,7 +472,9 @@ function renderSearchItem(w: Writer, field: FieldSchema): void {
 }
 
 function renderTable(w: Writer, component: TableSchema, model: PageModel): void {
-  w.line('    <el-table :data="rows" v-loading="loading" border>');
+  // row-key 影响选择列的「跨页保持勾选」与展开行；不给的话 el-table 会按索引认行
+  const rowKey = component.rowKey !== undefined ? ` row-key=${attr(component.rowKey)}` : '';
+  w.line(`    <el-table :data="rows" v-loading="loading" border${rowKey}>`);
   if (component.selection !== 'none') {
     w.line('      <el-table-column type="selection" width="48" />');
   }
@@ -398,7 +485,15 @@ function renderTable(w: Writer, component: TableSchema, model: PageModel): void 
     if (column.sortable === true) attrs.push('sortable');
     if (column.ellipsis === true) attrs.push('show-overflow-tooltip');
 
-    if (column.enumMap !== undefined) {
+    if (column.formatter !== undefined) {
+      // formatter 是「受限表达式」，不是函数名：写成 el-table-column 的 formatter prop
+      // 会变成一个不存在的函数引用，所以改走作用域插槽
+      w.line(`      <el-table-column ${attrs.join(' ')}>`);
+      w.line('        <template #default="{ row }">');
+      w.line(`          {{ ${column.formatter} }}`);
+      w.line('        </template>');
+      w.line('      </el-table-column>');
+    } else if (column.enumMap !== undefined) {
       const entries = Object.entries(column.enumMap)
         .map(([k, v]) => `${k}: ${quote(v)}`)
         .join(', ');
@@ -442,25 +537,27 @@ function renderTable(w: Writer, component: TableSchema, model: PageModel): void 
 function renderForm(w: Writer, component: FormSchema): void {
   w.line('    <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">');
   for (const field of component.fields) {
+    // 只读字段渲染成 disabled 而不是直接删掉：编辑页里 createdAt 这类值需要看得见
+    const dis = field.readOnly === true ? ' disabled' : '';
     w.line(`      <el-form-item label=${attr(field.label)} prop=${attr(field.prop)}>`);
     switch (field.control) {
       case 'textarea':
-        w.line(`        <el-input v-model="form.${field.prop}" type="textarea" />`);
+        w.line(`        <el-input v-model="form.${field.prop}" type="textarea"${dis} />`);
         break;
       case 'number':
-        w.line(`        <el-input-number v-model="form.${field.prop}" />`);
+        w.line(`        <el-input-number v-model="form.${field.prop}"${dis} />`);
         break;
       case 'switch':
-        w.line(`        <el-switch v-model="form.${field.prop}" />`);
+        w.line(`        <el-switch v-model="form.${field.prop}"${dis} />`);
         break;
       case 'date':
-        w.line(`        <el-date-picker v-model="form.${field.prop}" type="date" />`);
+        w.line(`        <el-date-picker v-model="form.${field.prop}" type="date"${dis} />`);
         break;
       case 'datetime':
-        w.line(`        <el-date-picker v-model="form.${field.prop}" type="datetime" />`);
+        w.line(`        <el-date-picker v-model="form.${field.prop}" type="datetime"${dis} />`);
         break;
       case 'select':
-        w.line(`        <el-select v-model="form.${field.prop}">`);
+        w.line(`        <el-select v-model="form.${field.prop}"${dis}>`);
         for (const value of field.enumValues ?? []) {
           const label = field.enumLabels?.[value] ?? value;
           w.line(`          <el-option label=${attr(label)} value=${attr(value)} />`);
@@ -468,10 +565,10 @@ function renderForm(w: Writer, component: FormSchema): void {
         w.line('        </el-select>');
         break;
       case 'upload':
-        w.line(`        <el-upload v-model:file-list="uploadFiles.${field.prop}" />`);
+        w.line(`        <el-upload v-model:file-list="uploadFiles.${field.prop}"${dis} />`);
         break;
       default:
-        w.line(`        <el-input v-model="form.${field.prop}" />`);
+        w.line(`        <el-input v-model="form.${field.prop}"${dis} />`);
     }
     w.line('      </el-form-item>');
   }
@@ -503,6 +600,9 @@ function renderActionGroup(w: Writer, component: ActionGroupSchema): void {
 function renderScript(w: Writer, model: PageModel): void {
   const { page, listSource, searchForm, form, detail, table, serverPaged } = model;
 
+  const tabsComponents = page.components.filter((c): c is TabsSchema => c.type === 'tabs');
+  const allActions: ActionSchema[] = [...(model.actions?.actions ?? []), ...(table?.rowActions ?? [])];
+
   // ── imports：只导入真正用到的，避免生成一堆 eslint 会报未使用的符号 ──
   // 注意 `reactive` 的条件不能简单写成「有搜索表单」：服务端分页时 query 来自
   // store，组件里根本没有 reactive(...) 调用，import 了就是一条未使用的导入。
@@ -510,8 +610,11 @@ function renderScript(w: Writer, model: PageModel): void {
     form !== undefined || detail !== undefined || (searchForm !== undefined && !serverPaged);
   const vueImports = new Set<string>(['onMounted']);
   if (usesReactive) vueImports.add('reactive');
-  if (table !== undefined || form !== undefined) vueImports.add('ref');
+  if (table !== undefined || form !== undefined || tabsComponents.length > 0) vueImports.add('ref');
   w.line(`import { ${[...vueImports].sort().join(', ')} } from 'vue';`);
+  if (allActions.some((a) => a.confirm !== undefined)) {
+    w.line("import { ElMessageBox } from 'element-plus';");
+  }
 
   const importedByModule = new Map<string, string[]>();
   for (const ds of model.sources) {
@@ -537,6 +640,15 @@ function renderScript(w: Writer, model: PageModel): void {
   for (const name of referencedTypeNames(typedFields)) types.add(name);
   if (types.size > 0) w.line(`import type { ${[...types].sort().join(', ')} } from '@/api/types.gen';`);
   w.blank();
+
+  // ── 容器状态 ──
+  if (tabsComponents.length > 0) {
+    // 默认停在第一个 tab。IR 里给了 activeKey 就用它，否则用第一个页签的 key
+    const first = tabsComponents[0]!;
+    const initial = first.activeKey ?? first.tabs[0]?.key ?? '';
+    w.line(`const activeTab = ref(${quote(initial)});`);
+    w.blank();
+  }
 
   // ── 查询条件与分页：分页时放 store 共享，不翻页时留在组件内 ──
   if (serverPaged) {
@@ -609,6 +721,19 @@ function renderScript(w: Writer, model: PageModel): void {
     w.blank();
     if (form.fields.some((f) => f.control === 'upload')) {
       w.line('const uploadFiles = reactive<Record<string, unknown[]>>({});');
+      w.blank();
+    }
+  }
+
+  // 编辑模式的回显：只有声明了 loadApi 才生成，否则在 onMounted 里留一条 todo
+  if (form !== undefined && form.loadApi !== undefined) {
+    const ds = model.sources.find((d) => d.operationId === form.loadApi?.operationId);
+    if (ds !== undefined) {
+      const paramsType = `${toPascalCase(ds.operationId)}Params`;
+      w.line('async function loadForm(id: string) {');
+      w.line(`  const res = await ${ds.operationId}({ id } as ${paramsType});`);
+      w.line('  Object.assign(form, res);');
+      w.line('}');
       w.blank();
     }
   }
@@ -689,12 +814,15 @@ function renderScript(w: Writer, model: PageModel): void {
     w.blank();
   }
 
-  const allActions: ActionSchema[] = [...(model.actions?.actions ?? []), ...(table?.rowActions ?? [])];
   if (allActions.length > 0) {
     w.line('async function handleAction(id: string, row: Record<string, unknown> | null) {');
     w.line('  switch (id) {');
     for (const action of allActions) {
       w.line(`    case ${quote(action.id)}: {`);
+      // 二次确认必须放在调用接口之前，否则用户点了「取消」但数据已经删了
+      if (action.confirm !== undefined) {
+        w.line(`      await ElMessageBox.confirm(${quote(action.confirm)}, '请确认', { type: 'warning' });`);
+      }
       if (action.api !== undefined) {
         const paramsType = `${toPascalCase(action.api.operationId)}Params`;
         if (action.navigateTo !== undefined) {
@@ -721,6 +849,9 @@ function renderScript(w: Writer, model: PageModel): void {
   if (table !== undefined) w.line('  void loadData();');
   if (detail !== undefined && detail.api !== undefined) {
     w.line('  // @dsg:todo 从路由参数取 id 后调用 loadDetail(id)');
+  }
+  if (form?.loadApi !== undefined) {
+    w.line('  // @dsg:todo 从路由参数取 id 后调用 loadForm(id)');
   }
   w.line('});');
 }

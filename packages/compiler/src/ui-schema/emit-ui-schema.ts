@@ -67,6 +67,11 @@ export interface FieldSchema {
   enumLabels?: Record<string, string>;
   /** 该字段在契约里的 JSON Schema 类型描述，供生成器写 TS 类型 */
   tsType: string;
+  /**
+   * 只读字段（如 createdAt / id）。
+   * 生成器据此把控件渲染成 disabled：表单里保留位置让人看得见，但不让人改。
+   */
+  readOnly?: boolean;
 }
 
 export interface ColumnSchema {
@@ -424,6 +429,8 @@ function fieldsOf(
     };
     if (binding.span !== undefined) item.span = binding.span;
     if (binding.placeholder !== undefined) item.placeholder = binding.placeholder;
+    // 只在 true 时输出：false 与「没有这个属性」对生成器是同一件事，写出来只是噪音
+    if (field.readOnly === true) item.readOnly = true;
     if (enumDef !== undefined) {
       item.enumValues = enumDef.values.map((v) => v.value);
       const labels: Record<string, string> = {};

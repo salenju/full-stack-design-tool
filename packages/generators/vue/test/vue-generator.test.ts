@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createAction, createForm, newComponentId } from '@fsdt/core-ir';
 import { buildFixture } from '@fsdt/core-ir/testing';
 import type { IR } from '@fsdt/core-ir';
 
@@ -18,6 +19,8 @@ import {
 } from '../src/index.js';
 
 const CTX = { projectName: 'demo', outputRoot: '/tmp/out' };
+/** fixture 的列表页产物路径 */
+const PAGE = 'src/views/devices.vue';
 
 async function renderPath(ir: IR, path: string): Promise<string> {
   const plan = vueGenerator.plan(ir, CTX).find((p) => p.path === path);
@@ -357,5 +360,154 @@ describe('生成物可编译性（回归）', () => {
     const content = (await vueGenerator.render(plan, ir, { projectName: '设备管理', outputRoot: '.' })).content;
     const pkg = JSON.parse(content) as { name: string };
     expect(pkg.name).toMatch(/^[a-z0-9][a-z0-9._-]*$/);
+  });
+});
+
+// ────────────────────────────── 容器与 UI Schema 属性 ──────────────────────────────
+
+/** 构造一个用满 tabs / card / formatter / confirm / visibleWhen / loadApi / readOnly 的页面 */
+function richPage() {
+  const fixture = buildFixture();
+  const { deviceIdField, deviceNameField, statusField, createApi, listApi, listPage } = fixture;
+
+  deviceIdField.readOnly = true;
+
+  const table = listPage.page.components.find((c) => c.type === 'table');
+  if (table === undefined) throw new Error('fixture 需要表格组件');
+  table.columns[1].formatter = "row.deviceName || '-'";
+  table.rowKey = 'deviceId';
+
+  const detailId = newComponentId();
+  listPage.page.components = [
+    {
+      id: newComponentId(),
+      type: 'tabs',
+      bindings: [],
+      visibleWhen: "detail.status !== 'ARCHIVED'",
+      tabs: [
+        { key: 'basic', label: '基本信息', componentIds: [detailId] },
+        { key: 'ops', label: '操作', componentIds: [] },
+      ],
+      activeKey: 'basic',
+    },
+    {
+      id: newComponentId(),
+      type: 'card',
+      bindings: [],
+      title: '设备列表',
+      shadow: 'hover',
+      componentIds: [table.id],
+    },
+    createAction({ title: '归档', level: 'danger', confirm: { text: '归档后不可恢复，确认？' }, navigateTo: '/archive' }),
+    {
+      id: detailId,
+      type: 'detail',
+      bindings: [{ fieldRef: deviceIdField.id }, { fieldRef: deviceNameField.id }, { fieldRef: statusField.id }],
+      apiRef: listApi.id,
+      columns: 2,
+      title: '设备详情',
+    },
+    createForm(
+      createApi.id,
+      [{ fieldRef: deviceIdField.id }, { fieldRef: deviceNameField.id }, { fieldRef: statusField.id, control: 'select' }],
+      { mode: 'edit', title: '编辑设备', loadApiRef: listApi.id, submitText: '保存' },
+    ),
+    // 被容器引用的组件仍留在扁平列表里，否则生成器回查不到
+    table,
+  ];
+  return fixture;
+}
+
+describe('容器组件（tabs / card）', () => {
+  it('tabs 按 componentIds 生成 el-tab-pane，并初始化 activeTab', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+
+    expect(content).toContain('<el-tabs v-model="activeTab">');
+    expect(content).toContain('<el-tab-pane label="基本信息" name="basic">');
+    expect(content).toContain('<el-tab-pane label="操作" name="ops">');
+    expect(content).toContain("const activeTab = ref('basic')");
+  });
+
+  it('card 生成 el-card 并带上 shadow 与标题', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+
+    expect(content).toContain('<el-card shadow="hover">');
+    expect(content).toContain('<template #header>设备列表</template>');
+  });
+
+  it('被容器引用的组件不会在顶层重复渲染', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content.match(/<el-table /g)?.length).toBe(1);
+    expect(content.match(/<el-descriptions /g)?.length).toBe(1);
+  });
+
+  it('容器引用了不存在的组件时留注释而不是静默丢弃', async () => {
+    const fixture = richPage();
+    fixture.listPage.page.components.unshift({
+      id: newComponentId(),
+      type: 'card',
+      bindings: [],
+      shadow: 'never',
+      componentIds: ['cp_doesnotexist'],
+    });
+    const content = await renderPath(fixture.ir, PAGE);
+    expect(content).toContain('容器引用了不存在的组件 cp_doesnotexist');
+  });
+
+  it('不再留下容器未实现的 TODO', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).not.toContain('尚未生成');
+  });
+});
+
+describe('UI Schema 属性消费', () => {
+  it('visibleWhen 生成外层 template v-if', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).toContain(`<template v-if="detail.status !== 'ARCHIVED'">`);
+  });
+
+  it('表格 rowKey 写成 row-key', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).toContain('row-key="deviceId"');
+  });
+
+  it('列 formatter 走作用域插槽，而不是 el-table-column 的 formatter prop', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).toContain("{{ row.deviceName || '-' }}");
+    expect(content).not.toContain('formatter="row.');
+  });
+
+  it('action.confirm 生成 ElMessageBox 二次确认并导入', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).toContain("import { ElMessageBox } from 'element-plus'");
+    expect(content).toContain("await ElMessageBox.confirm('归档后不可恢复，确认？'");
+  });
+
+  it('form.loadApi 生成回显函数，并在挂载处留 todo', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).toContain('async function loadForm(id: string)');
+    expect(content).toContain('Object.assign(form, res)');
+    expect(content).toContain('调用 loadForm(id)');
+  });
+
+  it('只读字段渲染成 disabled 而不是消失', async () => {
+    const { ir } = richPage();
+    const content = await renderPath(ir, PAGE);
+    expect(content).toContain('<el-input v-model="form.deviceId" disabled />');
+  });
+
+  it('没有 confirm 的页面不引入 ElMessageBox', async () => {
+    const { ir } = buildFixture();
+    const content = await renderPath(ir, 'src/views/devices.vue');
+    expect(content).not.toContain('ElMessageBox');
   });
 });
